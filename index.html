@@ -473,6 +473,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ===== level.js =====
 const LevelMod = (() => {
 // level.js — 수직 코스, 장애물, 체크포인트, 둥지, 하늘 분위기
@@ -545,6 +546,9 @@ function mat(color, emissive = 0, emissiveIntensity = 1) {
   return matCache.get(key);
 }
 
+// 합쳐진 정적 코스 메시용: mat() 과 같은 질감, 색은 정점마다
+const VERTEX_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0.05 });
+
 // 블렌더로 만든 코스 모델 (tools/assets.py → 맨 아래 #assets-glb). 이름 → 원본 Object3D
 // 재질 이름이 tint / tintdark / tintlight 인 부분은 붙일 때 고른 색(그대로·어둡게·밝게)으로 칠하고,
 // glow 로 시작하면 스스로 빛나게, 나머지는 모델의 색 그대로 mat() 캐시를 쓴다
@@ -600,6 +604,44 @@ class Level {
 
     this.root.updateMatrixWorld(true);
     for (const c of this.colliders) this._refreshCollider(c, true);
+    this._mergeStatic();
+  }
+
+  // 움직이지 않는 메시를 높이 60m 구역별로 하나로 합쳐 그리기 호출을 크게 줄인다.
+  // 색은 정점 색으로 옮겨 재질 하나(VERTEX_MAT)로 그리고, 스스로 빛나는 재질만 따로 둔다.
+  // 구역으로 나눠 두어야 화면 밖 구역은 통째로 그리지 않는다(frustum culling).
+  // 위치·색만 남긴다: 모든 코스 재질이 flatShading 이라 법선이 필요 없다.
+  _mergeStatic() {
+    const groups = new Map();
+    const v = new THREE.Vector3();
+    this.root.traverse((m) => {
+      if (!m.isMesh || !m.userData.static) return;
+      const glow = m.material.emissive.getHex() !== 0;
+      const key = `${glow ? m.material.id : 'vc'}|${Math.floor(m.getWorldPosition(v).y / 60)}|${m.receiveShadow}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    });
+    for (const [key, list] of groups) {
+      const vc = key.startsWith('vc');
+      const geos = list.map((m) => {
+        const g = new THREE.BufferGeometry();
+        const src = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+        const pos = src.getAttribute('position');
+        g.setAttribute('position', pos.clone());
+        if (vc) {
+          const c = m.material.color, col = new Float32Array(pos.count * 3);
+          for (let i = 0; i < col.length; i += 3) { col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b; }
+          g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        }
+        g.applyMatrix4(m.matrixWorld);
+        m.removeFromParent();
+        return g;
+      });
+      const merged = new THREE.Mesh(mergeGeometries(geos), vc ? VERTEX_MAT : list[0].material);
+      merged.receiveShadow = list[0].receiveShadow;
+      merged.matrixAutoUpdate = false;
+      this.root.add(merged);
+    }
   }
 
   // ── 랜덤 헬퍼 ──
@@ -615,6 +657,7 @@ class Level {
     // 그림자는 새만 만든다(착지 지점 표시용). 코스는 받기만 해서 그림자 패스를 가볍게
     m.castShadow = false;
     m.receiveShadow = this.ctx.shadow;
+    m.userData.static = !this.ctx.dynamic;   // _mergeStatic 대상
     parent.add(m);
     return m;
   }
@@ -660,6 +703,7 @@ class Level {
       if (!m.isMesh) return;
       m.castShadow = false;
       m.receiveShadow = this.ctx.shadow;
+      m.userData = { ...m.userData, static: !this.ctx.dynamic };   // 복제본끼리 userData 를 공유하지 않게 새 객체
       if (m.userData.tint) m.material = mat(_tmpC.setHex(color).multiplyScalar(m.userData.tint).getHex());
     });
     parent.add(o);
@@ -1558,9 +1602,15 @@ class Bird {
     this.body.rotation.order = 'YXZ';
     this.body.rotation.z = s.roll + Math.sin(this.tumble) * (s.stunned ? 0.9 : 0);
     this.body.rotation.x = s.pitch + (s.stunned ? this.tumble : 0);
-    this.body.position.y = s.grounded ? 0.05 + Math.abs(Math.sin(this.time * 1.5)) * 0.02 : 0;
-    this.tail.rotation.x = -s.pitch * 0.6 + (this.flapT < 1 ? Math.sin(this.flapT * Math.PI) * 0.25 : 0);
-    this.head.rotation.y = s.grounded ? Math.sin(this.time * 0.9) * 0.4 : 0;
+    // 서서 돌 때: 실제 새처럼 머리가 먼저 돌아가고, 몸은 세운 채 종종걸음(작은 깡충 + 좌우 뒤뚱)
+    const turn = Math.abs(s.turn || 0) > 0.05 ? s.turn : 0;
+    this.stepT = turn ? (this.stepT || 0) + dt * 12 : 0;
+    const hop = Math.abs(Math.sin(this.stepT));
+    if (turn) this.body.rotation.z += Math.sin(this.stepT) * 0.08;
+    this.body.position.y = s.grounded ? 0.05 + (turn ? hop * 0.09 : Math.abs(Math.sin(this.time * 1.5)) * 0.02) : 0;
+    this.tail.rotation.x = -s.pitch * 0.6 + (this.flapT < 1 ? Math.sin(this.flapT * Math.PI) * 0.25 : 0) + (turn ? hop * 0.15 : 0);
+    const headYaw = s.grounded ? (turn ? -turn * 0.7 : Math.sin(this.time * 0.9) * 0.4) : 0;
+    this.head.rotation.y += (headYaw - this.head.rotation.y) * (1 - Math.exp(-12 * dt));
   }
 }
 
@@ -2575,6 +2625,22 @@ const TUTORIAL_STEPS = [
     highlight: [],
   },
 ];
+// 크게 떨어져 높이를 잃었을 때 띄우는 놀림 멘트. {m} = 잃은 높이(m)
+const TAUNT_DROP = 30;   // 이만큼(m) 이상 잃어야 놀린다
+const TAUNTS = [
+  '방금 {m}m 날려먹었어요',
+  '중력 1승, 짭새 0승',
+  '{m}m 무료 낙하 체험, 즐거우셨나요?',
+  '추락 현장 조사 나왔습니다… 범인은 본인이네요',
+  '날개는 장식이었군요',
+  '현행범 체포! 혐의: 중력 무시',
+  '닭도 이것보단 잘 날겠어요',
+  '{m}m 아래에서 다시 만나요',
+  '방금 그건 일부러 그런 거죠?',
+  '경찰 독수리 체면이 말이 아니네요',
+  '올라가는 건 오래, 떨어지는 건 순식간',
+];
+
 function loadJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
 }
@@ -3130,7 +3196,12 @@ class Game {
     p.stamina = Math.min(C.STAMINA_MAX, p.stamina + (p.grounded ? C.STAMINA_REGEN_GROUND : C.STAMINA_REGEN_AIR) * dt);
 
     // 12) 추락 판정: 마지막으로 서 있던/가장 높았던 지점에서 크게 떨어지면 1회
-    if (p.grounded) { p.airPeak = p.pos.y; p.fallCounted = false; }
+    if (p.grounded) {
+      // 맨 밑 바닥이면 곧 복귀하므로 놀림은 checkProgress 에서 한 번만 (airPeak 도 그때까지 유지)
+      if (p.ground?.floor) return;
+      if (this.state === 'playing') this._taunt(p.airPeak - p.pos.y);
+      p.airPeak = p.pos.y; p.fallCounted = false;
+    }
     else {
       p.airPeak = Math.max(p.airPeak, p.pos.y);
       if (!p.fallCounted && this.state === 'playing' && p.airPeak - p.pos.y > C.FALL_COUNT_HEIGHT) {
@@ -3139,6 +3210,16 @@ class Game {
         this.ui.toast('추락!', 'warn');
       }
     }
+  }
+
+  // 크게 떨어져 높이를 lost(m) 잃었으면 놀림 멘트 (같은 멘트가 연달아 나오지 않게)
+  _taunt(lost, suffix = '') {
+    if (lost < TAUNT_DROP) return false;
+    let i;
+    do i = Math.floor(Math.random() * TAUNTS.length); while (i === this._lastTaunt);
+    this._lastTaunt = i;
+    this.ui.toast(TAUNTS[i].replace('{m}', Math.round(lost)) + suffix, 'warn');
+    return true;
   }
 
   // ── 구(새) vs 회전 박스(OBB) 충돌 ──
@@ -3229,8 +3310,10 @@ class Game {
     if (this.onFloor) {
       this.onFloor = false;
       if (!this.floorFallCounted) this.stats.falls++;
+      const peak = p.airPeak;
       this.respawn(this.cpIndex);
-      this.ui.toast(this.cpIndex > 0 ? '바닥에 떨어졌어요! 체크포인트로 돌아가요' : '바닥에 떨어졌어요! 출발점으로 돌아가요', 'warn');
+      const back = this.cpIndex > 0 ? '체크포인트로 돌아가요' : '출발점으로 돌아가요';
+      if (!this._taunt(peak - p.pos.y, ' · ' + back)) this.ui.toast('바닥에 떨어졌어요! ' + back, 'warn');
       this.sound.respawn();
       return;
     }
@@ -3238,8 +3321,9 @@ class Game {
     const floor = this.level.checkpoints[this.cpIndex].position.y - CONFIG.FALL_RESET_DEPTH;
     if (p.pos.y < floor || p.pos.y < -40) {
       if (!p.fallCounted) this.stats.falls++;
+      const peak = p.airPeak;
       this.respawn(this.cpIndex);
-      this.ui.toast('체크포인트에서 다시 시작해요', 'warn');
+      if (!this._taunt(peak - p.pos.y, ' · 체크포인트에서 다시 시작해요')) this.ui.toast('체크포인트에서 다시 시작해요', 'warn');
       this.sound.respawn();
     }
 
@@ -3373,7 +3457,8 @@ class Game {
     const live = !frozen;
     if (live) this.feathers.update(dt);
     const stunned = p.stun > 0;
-    const targetRoll = stunned ? 0 : -this.ctrl.tilt * CONFIG.MAX_ROLL; // 왼쪽 기울기 → 왼쪽 날개가 내려감
+    // 왼쪽 기울기 → 왼쪽 날개가 내려감. 서 있을 때는 몸을 세운 채 발로 돌아선다(Bird.update 의 turn)
+    const targetRoll = stunned || p.grounded ? 0 : -this.ctrl.tilt * CONFIG.MAX_ROLL;
     p.roll += (targetRoll - p.roll) * damp(8, dt);
     const targetPitch = p.grounded || this.state === 'clear' ? 0 : clamp(p.vel.y * 0.05, -0.55, 0.45);
     p.pitch += (targetPitch - p.pitch) * damp(6, dt);
@@ -3383,6 +3468,7 @@ class Game {
       roll: p.roll, pitch: p.pitch,
       grounded: p.grounded || this.state === 'clear', gliding: p.gliding, spread: p.spread,
       stunned, wingPose: this.input.wingPose,
+      turn: p.grounded && !stunned ? this.ctrl.tilt : 0,
     });
 
     // 하늘·조명
