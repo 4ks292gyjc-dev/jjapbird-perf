@@ -231,6 +231,36 @@
   body.touch #toast { top: 84px; }
   body.touch #cam { bottom: 140px; right: 90px; width: 130px; }
 
+  /* 튜토리얼 */
+  .tut-toggle { margin-top: 14px; }
+  #coach {
+    position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: min(440px, 92vw);
+    background: var(--paper); border-radius: 20px; padding: 14px 18px 16px; pointer-events: auto;
+    box-shadow: 0 12px 30px rgba(27,35,64,.25); border: 3px solid transparent; transition: border-color .2s;
+  }
+  #coach.done { border-color: var(--gold); }
+  #coach.done #coach-title::after { content: "  좋아요!"; color: var(--gold-deep); }
+  .coach-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--ink-soft); }
+  .coach-skip { border: 0; background: none; color: var(--ink-soft); text-decoration: underline; padding: 4px 0; font-size: 0.85rem; }
+  #coach h3 { margin: 4px 0 6px; font-family: var(--display); font-weight: 400; font-size: 1.45rem; }
+  #coach p { margin: 0; line-height: 1.55; }
+  .coach-tip { margin-top: 6px !important; font-size: 0.85rem; color: var(--ink-soft); }
+  #coach-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  #coach-progress .bar { flex: 1; }
+  #coach-fill { height: 100%; width: 0; background: var(--gold); transition: width .15s; }
+  #coach-count { font-family: var(--display); min-width: 3em; text-align: right; }
+  #coach-go { margin-top: 14px; width: 100%; }
+  body.coaching #toast { top: 230px; }
+  body.coaching #banner { display: none; }
+
+  /* 지금 써야 할 조작 강조 */
+  .hl { animation: hl 1.1s ease-in-out infinite; }
+  @keyframes hl { 0%, 100% { box-shadow: 0 0 0 0 rgba(244,197,66,.9); } 50% { box-shadow: 0 0 0 9px rgba(244,197,66,0); } }
+  #stamina.hl, #tilt-gauge.hl, #flight-state.hl { border-radius: 8px; }
+
+  body.touch #coach { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 102px); }
+  body.touch.coaching #toast { top: 300px; }
+
   @media (max-width: 860px) {
     #cam { width: 150px; }
     #menu { grid-template-columns: 1fr; padding: 28px; align-items: start; overflow-y: auto; }
@@ -240,6 +270,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #flap-ind.on, #banner.on, #hit-flash.on { animation-duration: .01s; }
+    .hl { animation: none; outline: 3px solid var(--gold); }
     #banner.on { animation: none; opacity: 1; }
   }
 </style>
@@ -256,6 +287,7 @@
       <button class="btn" id="btn-start-cam">카메라로 시작</button>
       <button class="btn ghost light" id="btn-start-key">키보드로 시작</button>
     </div>
+    <button class="chip tut-toggle" id="btn-tutorial" aria-pressed="true">튜토리얼 켜짐</button>
     <p id="cam-error" class="cam-error" role="alert" hidden></p>
     <p id="boot-error" class="cam-error" role="alert" hidden></p>
   </div>
@@ -310,7 +342,7 @@
     </div>
     <div>
       <div class="gauge-label"><span>왼쪽</span><span>기울기</span><span>오른쪽</span></div>
-      <div class="tilt"><span id="tilt-dot"></span></div>
+      <div class="tilt" id="tilt-gauge"><span id="tilt-dot"></span></div>
       <div id="stamina"><div class="gauge-label"><span>체력</span></div><div class="bar"><div id="stamina-fill"></div></div></div>
     </div>
     <div id="flight-state" data-kind="fly">날갯짓</div>
@@ -331,6 +363,16 @@
       <button class="t-btn small" id="t-glide">활공</button>
       <button class="t-btn big" id="t-flap">날갯짓</button>
     </div>
+  </div>
+
+  <!-- 튜토리얼 안내 카드 -->
+  <div id="coach" hidden role="status" aria-live="polite">
+    <div class="coach-top"><span id="coach-step">1 / 5</span><button class="coach-skip" id="coach-skip">건너뛰기</button></div>
+    <h3 id="coach-title"></h3>
+    <p id="coach-body"></p>
+    <p id="coach-tip" class="coach-tip"></p>
+    <div id="coach-progress"><div class="bar"><div id="coach-fill"></div></div><span id="coach-count"></span></div>
+    <button class="btn" id="coach-go" hidden>시작하기</button>
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
@@ -681,6 +723,7 @@ class Level {
     // 시작 지점 표시: 작은 광장
     const s = this._pathPos(0, 0);
     this.box(g, 9, 0.5, 9, 0xd9cfb8, s.x, 0.25, s.z, { landable: true });
+    this.colliders[this.colliders.length - 1].start = true;     // 튜토리얼에서 '첫 발판'과 구분하기 위해
   }
 
   // ── 일반 발판 ──
@@ -1560,11 +1603,12 @@ const UIMod = (() => {
 // ui.js — 메뉴, HUD, 일시정지, 클리어 화면 (DOM)
 // 2단계: 카메라 시작, 로딩, 캘리브레이션, 자동 일시정지, 웹캠 창(뼈대 표시)
 // 3단계: 감도 슬라이더, 효과음(Web Audio 합성), 터치 버튼, 최고 기록
+// 4단계: 튜토리얼 안내 카드(코치), 해야 할 조작 강조
 
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -1579,6 +1623,10 @@ class UI {
     $('btn-recalib').addEventListener('click', onRecalibrate);
     $('btn-pause').addEventListener('click', onPause);
     $('btn-mute').addEventListener('click', onMute);
+    $('btn-tutorial').addEventListener('click', onTutorialToggle);
+    $('coach-skip').addEventListener('click', onTutorialSkip);
+    $('coach-go').addEventListener('click', onTutorialGo);
+    this._hl = [];
 
     // 감도·볼륨 슬라이더
     this.onSettings = onSettings;
@@ -1656,6 +1704,53 @@ class UI {
     const b = $('btn-mute');
     b.textContent = m ? '소리 꺼짐' : '소리 켜짐';
     b.setAttribute('aria-pressed', String(m));
+  }
+
+  // ── 튜토리얼 ──
+  setTutorialToggle(on) {
+    const b = $('btn-tutorial');
+    b.textContent = on ? '튜토리얼 켜짐' : '튜토리얼 꺼짐';
+    b.setAttribute('aria-pressed', String(on));
+  }
+
+  showCoach(step, index, total) {
+    const c = $('coach');
+    c.hidden = false;
+    c.classList.remove('done');
+    document.body.classList.add('coaching');
+    $('coach-step').textContent = `${index + 1} / ${total}`;
+    $('coach-title').textContent = step.title;
+    $('coach-body').textContent = step.body;
+    $('coach-tip').textContent = step.tip || '';
+    $('coach-tip').hidden = !step.tip;
+    $('coach-progress').hidden = !!step.final;
+    $('coach-go').hidden = !step.final;
+    $('coach-skip').hidden = !!step.final;
+    this.setCoachProgress(0, '');
+    // 지금 써야 할 버튼·계기를 반짝이게
+    for (const el of this._hl) el.classList.remove('hl');
+    this._hl = (step.highlight || []).map((id) => $(id)).filter(Boolean);
+    for (const el of this._hl) el.classList.add('hl');
+    if (step.final) requestAnimationFrame(() => $('coach-go').focus());
+  }
+
+  setCoachProgress(v, label) {
+    this._set('coachP', Math.round(v * 100), (x) => { $('coach-fill').style.width = `${x}%`; });
+    this._set('coachL', label, (x) => { $('coach-count').textContent = x; });
+  }
+
+  coachDone() {
+    $('coach').classList.add('done');
+    $('coach-fill').style.width = '100%';
+    for (const el of this._hl) el.classList.remove('hl');
+    this._hl = [];
+  }
+
+  hideCoach() {
+    $('coach').hidden = true;
+    document.body.classList.remove('coaching');
+    for (const el of this._hl) el.classList.remove('hl');
+    this._hl = [];
   }
 
   // 터치 기기면 터치 버튼을 보이고 메뉴 문구를 바꾼다
@@ -1886,6 +1981,14 @@ class Sound {
       this._tone(t + i * 0.11, f, 0.7, { gain: 0.18 });
       this._tone(t + i * 0.11, f * 2, 0.35, { gain: 0.04 });
     });
+  }
+
+  // 튜토리얼 단계 성공: 짧은 '띵동'
+  ding() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this._tone(t, 1318.5, 0.25, { gain: 0.15 });
+    this._tone(t + 0.09, 1760, 0.4, { gain: 0.15 });
   }
 
   // 추락 복귀
@@ -2283,6 +2386,7 @@ const { PoseInput, POSE } = PoseMod;
 // 1단계: 키보드로 조작되는 3D 비행 + 레벨
 // 2단계: pose.js(카메라 동작 인식) 연결, 캘리브레이션, 사람이 안 보이면 자동 일시정지
 // 3단계: 효과음, 깃털 연출, 감도 설정(저장), 터치 조작, 모바일 최적화, 클리어 연출
+// 4단계: 튜토리얼 (직접 해보면서 다음 단계로 넘어가는 조작 안내)
 
 
 // ─────────────────────────────────────────────────────────────
@@ -2369,7 +2473,61 @@ if (IS_TOUCH) {
 // 설정 저장 (감도·볼륨). 저장소를 못 쓰는 환경이면 기본값으로
 const SETTINGS_KEY = 'jjapsae-settings';
 const BEST_KEY = 'jjapsae-best';
-const DEFAULT_SETTINGS = { flap: 1, tilt: 1, volume: 0.7, muted: false, stamina: true };
+const DEFAULT_SETTINGS = { flap: 1, tilt: 1, volume: 0.7, muted: false, stamina: true, tutorial: true };
+
+// ─────────────────────────────────────────────────────────────
+// 튜토리얼 단계: 안내 문구는 조작 방식(camera / keyboard / touch)마다 다르다.
+// need 만큼 해내면 다음 단계로. 시간 단위는 초, turn 은 라디안
+// ─────────────────────────────────────────────────────────────
+const TUTORIAL_STEPS = [
+  {
+    id: 'flap', need: 3, title: '날갯짓으로 날아올라요',
+    body: {
+      camera: '양팔을 어깨 위로 올렸다가 아래로 힘차게 내리세요. 3번 해보세요.',
+      keyboard: 'Space 키를 눌러 날갯짓하세요. 3번 해보세요.',
+      touch: '오른쪽 아래 날갯짓 버튼을 3번 눌러보세요.',
+    },
+    tip: '빠르게 반복할수록 빨리 올라가요.',
+    highlight: ['flap-ind', 't-flap'],
+  },
+  {
+    id: 'glide', need: 1.5, title: '멈추면 활공해요',
+    body: {
+      camera: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. 양팔을 옆으로 쭉 펴면 더 오래 떠 있어요.',
+      keyboard: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. Shift를 누르고 있으면 더 오래 떠 있어요.',
+      touch: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. 활공 버튼을 누르고 있으면 더 오래 떠 있어요.',
+    },
+    tip: '바닥에 있다면 먼저 날갯짓으로 떠오르세요.',
+    highlight: ['flight-state', 't-glide'],
+  },
+  {
+    id: 'turn', need: Math.PI / 2, title: '방향을 바꿔요',
+    body: {
+      camera: '몸을 왼쪽이나 오른쪽으로 기울이면 새가 그쪽으로 돌아요. 한 바퀴의 4분의 1만큼 돌아보세요.',
+      keyboard: 'A·D 또는 ←·→ 키를 누르고 있으면 돌아요. 4분의 1바퀴 돌아보세요.',
+      touch: '◀ ▶ 버튼을 누르고 있으면 돌아요. 4분의 1바퀴 돌아보세요.',
+    },
+    tip: '발판 위에서도 제자리에서 돌 수 있어요.',
+    highlight: ['tilt-gauge', 't-left', 't-right'],
+  },
+  {
+    id: 'rest', need: 1, title: '발판에서 쉬어요',
+    body: {
+      all: '금색 화살표가 가리키는 발판에 내려앉아 보세요. 날갯짓할 때마다 체력이 줄고, 발판에 앉으면 다시 차요.',
+    },
+    tip: '그림자를 보면 어디에 내려앉을지 알 수 있어요.',
+    highlight: ['stamina'],
+    marker: true,
+  },
+  {
+    id: 'goal', final: true, title: '준비 끝!',
+    body: {
+      all: '빛기둥이 솟은 체크포인트를 지나 꼭대기의 빛나는 둥지까지 올라가세요. 맨 밑 바닥에 닿으면 체크포인트로 돌아가요.',
+    },
+    tip: '',
+    highlight: [],
+  },
+];
 function loadJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
 }
@@ -2520,6 +2678,12 @@ class Game {
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
       onMute: () => this.applySettings({ ...this.settings, muted: !this.settings.muted }),
+      onTutorialToggle: () => {
+        this.applySettings({ ...this.settings, tutorial: !this.settings.tutorial });
+        this.ui.setTutorialToggle(this.settings.tutorial);
+      },
+      onTutorialSkip: () => this.endTutorial(true),
+      onTutorialGo: () => this.endTutorial(false),
     });
     this.ui.setTouchMode(IS_TOUCH);
     this.kb.bindTouch({
@@ -2531,6 +2695,17 @@ class Game {
     this.applySettings(this.settings);
     this.ui.setSettings(this.settings);
     this.best = loadJSON(BEST_KEY, null);
+    this.tutorial = null;               // 진행 중이면 { i, value, doneT, lastYaw }
+    this.ui.setTutorialToggle(this.settings.tutorial);
+
+    // 튜토리얼 '첫 발판' 화살표
+    this.marker = new THREE.Mesh(
+      new THREE.ConeGeometry(0.9, 1.8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xf4c542, emissive: 0xc9971a, emissiveIntensity: 0.8, flatShading: true }),
+    );
+    this.marker.rotation.x = Math.PI;   // 아래를 가리키게
+    this.marker.visible = false;
+    this.scene.add(this.marker);
     this.clearT = 0;
     this.ui.setCheckpointMarks(this.level.checkpoints.slice(1).map((c) => c.position.y / NEST_HEIGHT));
 
@@ -2607,6 +2782,7 @@ class Game {
     if (e.code === 'Enter' && this.state === 'menu') { this.mode = 'keyboard'; this.start(); }
     if (e.code === 'Enter' && this.state === 'clear') this.start();
     if (this.state !== 'playing') return;
+    if (e.code === 'Enter' && this.tutorial && TUTORIAL_STEPS[this.tutorial.i].final) this.endTutorial(false);
     if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
     if (e.code === 'KeyM') this.applySettings({ ...this.settings, muted: !this.settings.muted });
     if (CONFIG.DEBUG && /^Digit[1-4]$/.test(e.code)) {
@@ -2630,6 +2806,84 @@ class Game {
     this.ui.show('hud');
     this.ui.showSection(SECTIONS[0].name, 0);
     this.clock.getDelta();
+    this.endTutorial(null);
+    if (this.settings.tutorial) this.beginTutorial();
+  }
+
+  // ── 튜토리얼 ──
+  controlKind() { return this.mode === 'camera' ? 'camera' : IS_TOUCH ? 'touch' : 'keyboard'; }
+
+  beginTutorial() {
+    this.tutorial = { i: -1, value: 0, doneT: 0, lastYaw: this.p.yaw };
+    this._nextTutorialStep();
+  }
+
+  _nextTutorialStep() {
+    const t = this.tutorial;
+    t.i++;
+    t.value = 0;
+    t.doneT = 0;
+    t.lastYaw = this.p.yaw;
+    const step = TUTORIAL_STEPS[t.i];
+    let body = step.body[this.controlKind()] || step.body.all;
+    if (step.id === 'rest' && !CONFIG.STAMINA_ENABLED) body = '금색 화살표가 가리키는 발판에 내려앉아 보세요. 발판 위에서 쉬었다가 다시 출발할 수 있어요.';
+    this.ui.showCoach({ ...step, body }, t.i, TUTORIAL_STEPS.length);
+    this.marker.visible = !!step.marker;
+  }
+
+  // 단계마다 목표를 채웠는지 확인
+  _updateTutorial(dt) {
+    const t = this.tutorial, p = this.p;
+    if (!t) return;
+    const step = TUTORIAL_STEPS[t.i];
+    if (this.marker.visible) {
+      const fp = this.level.pathPoints[1];
+      this.marker.position.set(fp.x, fp.y + 3.2 + Math.sin(this.levelTime * 3) * 0.4, fp.z);
+      this.marker.rotation.y += dt * 2;
+    }
+    if (t.doneT > 0) {                      // '좋아요!' 를 잠깐 보여준 뒤 다음 단계
+      t.doneT -= dt;
+      if (t.doneT <= 0) this._nextTutorialStep();
+      return;
+    }
+    if (step.final) return;
+
+    if (step.id === 'glide') t.value = p.gliding ? t.value + dt : t.value;
+    if (step.id === 'turn') {
+      t.value += Math.abs(Math.atan2(Math.sin(p.yaw - t.lastYaw), Math.cos(p.yaw - t.lastYaw)));
+      t.lastYaw = p.yaw;
+    }
+    if (step.id === 'rest') {
+      const onPlatform = p.grounded && p.ground && !p.ground.floor && !p.ground.start;
+      t.value = onPlatform ? t.value + dt : 0;
+    }
+    this.ui.setCoachProgress(Math.min(1, t.value / step.need), step.id === 'flap' ? `${Math.min(step.need, t.value)} / ${step.need}` : '');
+    if (t.value >= step.need) {
+      t.doneT = 1.0;
+      this.marker.visible = false;
+      this.ui.coachDone();
+      this.sound.ding();
+    }
+  }
+
+  _tutorialFlap() {
+    const t = this.tutorial;
+    if (t && t.doneT <= 0 && TUTORIAL_STEPS[t.i].id === 'flap') t.value++;
+  }
+
+  // skipped: true = 건너뛰기, false = 끝까지 완료, null = 조용히 정리(다시 시작 등)
+  endTutorial(skipped) {
+    const wasActive = !!this.tutorial;
+    this.tutorial = null;
+    this.marker.visible = false;
+    this.ui.hideCoach();
+    if (skipped === null || !wasActive) return;
+    // 한 번 보거나 건너뛰면 다음부터는 자동으로 안 나온다 (메뉴에서 다시 켤 수 있음)
+    this.applySettings({ ...this.settings, tutorial: false });
+    this.ui.setTutorialToggle(false);
+    // 튜토리얼 동안의 시간·추락은 기록에 넣지 않는다
+    this.stats = { time: 0, falls: 0 };
+    this.ui.toast(skipped ? '튜토리얼을 건너뛰었어요' : '출발! 기록 측정을 시작해요', 'gold');
   }
 
   pause() { this.state = 'paused'; this.sound.wind(0, false); this.ui.show('pause', { camera: this.mode === 'camera' }); }
@@ -2729,6 +2983,7 @@ class Game {
       p.vel.addScaledVector(_fwd, C.FLAP_FORWARD * scale);
       if (p.grounded) { p.grounded = false; p.ground = null; p.pos.y += 0.05; } // 이륙
       p.lastFlap = this.simTime;
+      this._tutorialFlap();
     } else if (!p.grounded) {
       this.ui.toast('체력이 없어요! 발판에 내려앉아 쉬세요', 'warn');
     }
@@ -3015,7 +3270,8 @@ class Game {
       while (this.acc >= STEP && n < 8) { this.step(STEP); this.acc -= STEP; n++; }
       if (n === 8) this.acc = 0;
 
-      this.stats.time += dt;
+      if (!this.tutorial) this.stats.time += dt;   // 튜토리얼 중에는 시간 안 셈
+      this._updateTutorial(dt);
       this.checkProgress();
       if (this.state === 'playing') this.updateCamera(dt);
       if (this.state === 'playing' && this.mode === 'camera' && !this.pose.present) this.goAway();
