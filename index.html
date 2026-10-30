@@ -1311,7 +1311,8 @@ class Level {
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
       const baseY = sec.theme === 'garden' ? sec.from - 10 : sec.from + 40;
       for (let i = 0; i < n; i++) {
-        const a = this.r(0, Math.PI * 2), rr = this.r(15, 190);
+        // 코스(반지름 29~47m, 장애물 포함 ±9m)를 가리지 않게 75m 바깥에만. 구름 하나가 최대 지름 36m
+        const a = this.r(0, Math.PI * 2), rr = this.r(75, 190);
         p.set(Math.cos(a) * rr, baseY + this.r(-8, 8), Math.sin(a) * rr);
         q.setFromEuler(new THREE.Euler(0, this.r(0, 6), 0));
         const k = this.r(3, 9);
