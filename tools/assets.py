@@ -30,7 +30,7 @@ kit = Kit('jjassets', {
     'stone': 0x8d877d, 'steel': 0x8f969c, 'steelDark': 0x3a3f44, 'dirt': 0x6e5a45, 'straw': 0xd6b779,
     'cloth': 0xb5463a, 'sail': 0xf6f1e6, 'gold': 0xe0b04a, 'panel': 0x24336f, 'black': 0x1c1c1c,
     'yellow': 0xf2c230, 'egg': 0xf6f0e2, 'eggSpot': 0x8a7a60, 'twig': 0x7b5a33, 'twigDark': 0x5a3e22,
-    'roofRed': 0x7d4a3a, 'down': 0xfbf7ee, 'glowgold': 0xf4c542,
+    'roofRed': 0x7d4a3a, 'down': 0xfbf7ee, 'glowgold': 0xf4c542, 'glowcyan': 0x7fd6ff,
 }, shiny={'glass': (0.15, 0.0), 'steel': (0.45, 0.6), 'gold': (0.3, 0.8), 'panel': (0.25, 0.3),
           'steelDark': (0.5, 0.5)})
 
@@ -416,6 +416,189 @@ for x in (-5.5, 5.5):
     for z in (-5.5, 5.5):
         p.box((x, 0.25, z), (0.7, 0.5, 0.7), 'stone')
         p.box((x, 0.6, z), (0.5, 0.25, 0.5), 'glowgold')
+p.build()
+
+
+# ── 계단 (m): 예전 _obj_stairs 와 같은 5단 + 꼭대기 단(윗면 y=0, 진행 -Z). 몸 = tint ──
+p = Part('stairs')
+for k in range(5):
+    y, z = -k * 0.9 - 0.3, k * 1.3 - 2.6
+    p.box((0, y, z), (3.2, 0.6, 1.4), 'tint')
+    p.box((0, y + 0.31, z - 0.62), (3.2, 0.04, 0.16), 'tintlight')          # 디딤판 앞 모서리
+    p.box((0, y - 0.45, z + 0.2), (2.6, 0.3, 1.0), 'tintdark')               # 아래 받침
+p.box((0, -0.3, -4.5), (3.2, 0.6, 2.4), 'tint')
+p.box((0, 0.01, -3.36), (3.2, 0.04, 0.16), 'tintlight')
+for sx in (-1, 1):                                                           # 옆판(측보)
+    p.poly([(sx * 1.66, -0.0, -5.7), (sx * 1.66, -0.0, -3.3), (sx * 1.66, -3.6, 3.3), (sx * 1.66, -4.6, 3.3), (sx * 1.66, -1.0, -5.7)], 0.12, 'tintdark')
+for k in range(6):                                                           # 난간 (+x 쪽)
+    y, z = (-k * 0.9 if k < 5 else 0.0), (k * 1.3 - 2.6 if k < 5 else -4.5)
+    p.cyl((1.45, y, z), (1.45, y + 1.0, z), 0.04, 'steel', 5)
+p.loft([((1.45, 1.0, -4.5), 0.035, 0.035), ((1.45, 1.0, -2.6), 0.035, 0.035), ((1.45, -2.6, 2.6), 0.035, 0.035)], 'steel', 5)
+p.build()
+
+
+# ── 깨진 콘크리트 판 (unit): 예전 상자(중심 원점, 1×1×1) 자리. 몸 = tint ──
+p = Part('slab')
+n = 12
+top = [(math.cos(TAU * j / n + 0.26) * 0.7 * jitter(0.92, 1.0), 0.5, math.sin(TAU * j / n + 0.26) * 0.7 * jitter(0.92, 1.0)) for j in range(n)]
+top = [(max(-0.5, min(0.5, x)), y, max(-0.5, min(0.5, z))) for x, y, z in top]   # 네모난 판, 모서리만 깨진 모양
+mid = [(x * 0.98, 0.1, z * 0.98) for x, _, z in top]
+bot = [(x * 0.92, -0.5, z * 0.92) for x, _, z in top]
+p.stack([top, mid, bot], 'tint', paint=lambda k: 'tint' if k == 0 else 'tintdark')
+p.face(list(range(len(p.verts) - n, len(p.verts))), 'tintdark')
+for a, b in (((-0.4, -0.1), (0.05, 0.12)), ((0.05, 0.12), (0.38, 0.3)), ((0.05, 0.12), (0.1, -0.42))):   # 금
+    p.loft([((a[0], 0.505, a[1]), 0.006, 0.004), ((b[0], 0.505, b[1]), 0.006, 0.004)], 'tintdark', 4)
+for _ in range(5):                                                           # 떨어진 조각
+    p.box((jitter(-0.35, 0.35), 0.53, jitter(-0.35, 0.35)), (jitter(0.04, 0.08), 0.06, jitter(0.04, 0.08)), 'tintlight', ry=jitter(0, 3))
+p.build()
+
+
+# ── 구멍 벽 판 (unit): 예전 상자 자리. 판 이음선과 테두리. 몸 = tint ──
+p = Part('wall_panel')
+p.box((0, 0, 0), (1, 1, 1), 'tint')
+for sz in (-1, 1):
+    for t in (-0.25, 0.25):
+        p.box((t, 0, sz * 0.505), (0.008, 1, 0.01), 'tintdark')
+        p.box((0, t, sz * 0.505), (1, 0.008, 0.01), 'tintdark')
+    for sx in (-1, 1):
+        p.box((sx * 0.49, 0, sz * 0.505), (0.02, 1, 0.012), 'tintlight')
+        p.box((0, sx * 0.49, sz * 0.505), (1, 0.02, 0.012), 'tintlight')
+p.build()
+
+# ── 구멍 테두리 (unit): 1×1 구멍을 감싸는 틀(두께 1 = 게임이 벽 두께로 늘림). 틀 = tint ──
+p = Part('gate_frame')
+w = 0.07
+for s in (-1, 1):
+    p.box((0, s * 0.5, 0), (1 + 2 * w, w, 1), 'tint')
+    p.box((s * 0.5, 0, 0), (w, 1 - w, 1), 'tint')
+    for t in (-1, 1):
+        p.box((s * 0.5, t * 0.5, 0), (w * 1.6, w * 1.6, 1.08), 'yellow')   # 모서리 보강
+for k in range(8):                                                           # 노랑·검정 경고 띠 (위·아래 앞면)
+    x = -0.4375 + k * 0.125
+    for sy in (-1, 1):
+        for sz in (-1, 1): p.box((x, sy * 0.5, sz * 0.51), (0.125, w * 0.7, 0.01), 'yellow' if k % 2 else 'black')
+p.build()
+
+
+# ── 도로 판 (unit): 예전 상자 자리. 아스팔트 + 차선 + 갈라짐. 몸 = tint ──
+p = Part('road')
+p.box((0, 0, 0), (1, 1, 1), 'tint')
+for z in [i * 0.2 - 0.4 for i in range(5)]: p.box((0, 0.505, z), (0.03, 0.01, 0.1), 'trim')    # 가운데 점선
+for sx in (-1, 1): p.box((sx * 0.45, 0.505, 0), (0.02, 0.01, 1), 'trim')                     # 가장자리 선
+for sx in (-1, 1): p.box((sx * 0.495, 0.08, 0), (0.01, 0.9, 1), 'tintlight')                 # 연석
+for a, b in (((-0.3, -0.45), (-0.1, 0.0)), ((-0.1, 0.0), (0.25, 0.2)), ((0.25, 0.2), (0.3, 0.48))):
+    p.loft([((a[0], 0.506, a[1]), 0.008, 0.003), ((b[0], 0.506, b[1]), 0.008, 0.003)], 'black', 4)
+p.build()
+
+
+# ── 폐건물 (unit): 예전 상자(중심 원점) 자리. 층마다 창 띠, 옥상 난간·물탱크. 몸 = tint ──
+def building(name, floors):
+    p = Part(name)
+    p.box((0, 0, 0), (1, 1, 1), 'tint')
+    fh = 1 / floors
+    for f in range(floors):
+        y0 = -0.5 + f * fh
+        p.loft([((0, y0 + 0.02 * fh, -0.505), 0.505, 0.02 * fh), ((0, y0 + 0.02 * fh, 0.505), 0.505, 0.02 * fh)], 'tintdark', 4, phase=math.pi / 4)
+        for side in range(4):
+            nx, nz = ((1, 0), (-1, 0), (0, 1), (0, -1))[side]
+            for c in range(3):
+                t = -0.3 + c * 0.3
+                cx, cz = (nx * 0.505, t) if nx else (t, nz * 0.505)
+                broken = random.random() < 0.3
+                p.box((cx, y0 + 0.55 * fh, cz), ((0.012, 0.5 * fh, 0.2) if nx else (0.2, 0.5 * fh, 0.012)), 'black' if broken else 'glass')
+                p.box((cx * (1.01 if nx else 1), y0 + 0.27 * fh, cz * (1 if nx else 1.01)),
+                      ((0.03, 0.02 * fh + 0.004, 0.24) if nx else (0.24, 0.02 * fh + 0.004, 0.03)), 'tintlight')
+    for s in (-1, 1):                                                          # 옥상 난간
+        p.box((0, 0.5 + 0.02, s * 0.49), (1, 0.04, 0.02), 'tintdark')
+        p.box((s * 0.49, 0.5 + 0.02, 0), (0.02, 0.04, 1), 'tintdark')
+    p.cyl((0.22, 0.5, -0.2), (0.22, 0.5 + 0.08 / floors * 2, -0.2), 0.1, 'steelDark', 8)   # 물탱크
+    p.box((-0.2, 0.52, 0.2), (0.2, 0.04, 0.15), 'steel')                                  # 실외기
+    p.build()
+building('building_low', 2)
+building('building_tall', 8)
+
+
+# ── 부러진 빌딩 한 층 (unit): 예전 층 상자(w×7×w) 자리. 기둥 + 창 띠 + 바닥 띠. 몸 = tint ──
+p = Part('tower_floor')
+p.box((0, 0, 0), (0.98, 1, 0.98), 'tint')
+p.box((0, -0.47, 0), (1.02, 0.06, 1.02), 'tintdark')
+for side in range(4):
+    nx, nz = ((1, 0), (-1, 0), (0, 1), (0, -1))[side]
+    for c in range(6):
+        t = -0.4 + c * 0.16
+        cx, cz = (nx * 0.495, t) if nx else (t, nz * 0.495)
+        p.box((cx, 0.05, cz), ((0.02, 0.45, 0.12) if nx else (0.12, 0.45, 0.02)), 'black' if random.random() < 0.25 else 'glass')
+for sx in (-1, 1):
+    for sz in (-1, 1): p.box((sx * 0.49, 0, sz * 0.49), (0.06, 1, 0.06), 'tintlight')
+p.build()
+
+
+# ── 크레인 기둥 한 마디 (m): 3.2×6 격자, y 0..6. 노란색 = tint ──
+p = Part('crane_mast')
+h, a = 6.0, 1.5
+for sx in (-1, 1):
+    for sz in (-1, 1): p.cyl((sx * a, 0, sz * a), (sx * a, h, sz * a), 0.14, 'tint', 6)       # 기둥 4개
+for y in (0.1, 3.0):
+    for s in (-1, 1):
+        p.cyl((-a, y, s * a), (a, y, s * a), 0.07, 'tint', 5)
+        p.cyl((s * a, y, -a), (s * a, y, a), 0.07, 'tint', 5)
+for s in (-1, 1):                                                                           # 대각 보강
+    p.cyl((-a, 0.1, s * a), (a, 3.0, s * a), 0.06, 'tint', 5); p.cyl((a, 3.0, s * a), (-a, 5.9, s * a), 0.06, 'tint', 5)
+    p.cyl((s * a, 0.1, -a), (s * a, 3.0, a), 0.06, 'tint', 5); p.cyl((s * a, 3.0, a), (s * a, 5.9, -a), 0.06, 'tint', 5)
+p.build()
+
+# ── 크레인 지브 (m): 예전 지브(2.4×2.2×54, z -47..7) + 평형추(4×4×6, z 10) 자리, 원점 = 회전축 ──
+p = Part('crane_jib')
+for sx in (-1, 1): p.cyl((sx * 1.1, -1.0, -47), (sx * 1.1, -1.0, 7), 0.12, 'tint', 6)       # 아래 현재 2
+p.cyl((0, 1.05, -47), (0, 1.05, 7), 0.12, 'tint', 6)                                        # 위 현재 1
+for i in range(19):                                                                         # 삼각 트러스
+    z0, z1 = -47 + i * 3, -47 + (i + 1) * 3
+    for sx in (-1, 1):
+        p.cyl((sx * 1.1, -1.0, z0), (0, 1.05, z1), 0.06, 'tint', 4)
+        p.cyl((sx * 1.1, -1.0, z0), (0, 1.05, z0), 0.05, 'tint', 4)
+    p.cyl((-1.1, -1.0, z0), (1.1, -1.0, z0), 0.05, 'tint', 4)
+p.box((0, -1.05, -20), (1.6, 0.06, 54), 'steelDark')                                        # 점검 통로
+p.box((0, -1.4, -38), (1.4, 0.5, 1.6), 'steelDark')                                        # 트롤리
+p.cyl((0, -1.6, -38), (0, -9.0, -38), 0.03, 'black', 4)                                     # 와이어 + 갈고리
+p.loft([((0, -9.0, -38), 0.12, 0.12), ((0, -9.6, -38), 0.12, 0.12), ((0.35, -9.9, -38), 0.1, 0.1),
+        ((0.5, -9.5, -38), 0.0005, 0.0005)], 'steelDark', 6)
+for k in range(3): p.box((0, -0.3 + k * 0.05, 8.0 + k * 2), (4.0, 3.9, 1.9), 'stone')         # 콘크리트 평형추
+p.box((0, 2.3, 4.5), (2.2, 2.0, 2.2), 'yellow')                                             # 조종실
+p.box((0, 2.5, 3.39), (1.8, 1.0, 0.02), 'glass')
+p.build()
+
+
+# ── 거대 나무 줄기 (unit): 예전 원기둥(반지름 0.5, y -0.5..0.5) 자리. 뿌리가 퍼진 껍질 ──
+p = Part('trunk')
+n = 9
+rings = []
+for y, r in ((0.5, 0.3), (0.2, 0.36), (-0.2, 0.42), (-0.42, 0.5), (-0.5, 0.75)):
+    rings.append([(math.cos(TAU * j / n) * r * (1.12 if j % 3 == 0 and y < -0.3 else jitter(0.95, 1.03)), y,
+                   math.sin(TAU * j / n) * r * (1.12 if j % 3 == 0 and y < -0.3 else jitter(0.95, 1.03))) for j in range(n)])
+p.stack(rings, 'wood', paint=lambda k: 'twigDark' if k % 2 else 'wood')
+p.face(list(range(len(p.verts) - n, len(p.verts))), 'wood')
+for k in range(3):                                                                          # 굵은 가지
+    a = k * TAU / 3 + 0.4
+    p.loft([((math.cos(a) * 0.2, 0.3, math.sin(a) * 0.2), 0.09, 0.09),
+            ((math.cos(a) * 0.9, 0.48, math.sin(a) * 0.9), 0.05, 0.05), ((math.cos(a) * 1.2, 0.5, math.sin(a) * 1.2), 0.0005, 0.0005)], 'wood', 6)
+p.build()
+
+# ── 잎 덩어리 (unit): 예전 정이십면체(반지름 1) 자리. 잎 = tint ──
+p = Part('foliage')
+for c, r, m in (((0, 0, 0), (0.85, 0.8, 0.85), 'tint'), ((0.45, 0.25, 0.2), (0.6, 0.55, 0.6), 'tintlight'),
+                ((-0.4, 0.2, -0.3), (0.6, 0.55, 0.6), 'tint'), ((0.1, -0.3, -0.45), (0.55, 0.45, 0.55), 'tintdark'),
+                ((-0.2, 0.45, 0.35), (0.5, 0.45, 0.5), 'tintlight')):
+    p.sphere(c, r, m, seg=8, rings=6, warp=lambda x, y, z: (x * jitter(0.88, 1.12), y * jitter(0.88, 1.12), z * jitter(0.88, 1.12)))
+p.build()
+
+
+# ── 모놀리스 (unit): 예전 검은 상자 자리. 빛나는 이음선 ──
+p = Part('monolith')
+p.box((0, 0, 0), (1, 1, 1), 'black')
+for sz in (-1, 1):
+    for x in (-0.3, 0, 0.3): p.box((x, 0, sz * 0.505), (0.02, 0.96, 0.01), 'glowcyan')
+    for y in (-0.35, 0.1, 0.4): p.box((0, y, sz * 0.505), (0.96, 0.004, 0.01), 'glowcyan')
+for sx in (-1, 1): p.box((sx * 0.505, 0, 0), (0.01, 0.96, 0.1), 'glowcyan')
 p.build()
 
 
