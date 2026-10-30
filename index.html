@@ -2011,7 +2011,7 @@ class UI {
 
   setTries(n) { this.el.tries.textContent = n; }
 
-  showClear({ time, falls }, best, isNew, tries) {
+  showClear({ time, falls }, best, isNew, tries, practice) {
     const fmt = fmtTime;
     $('photo-card').hidden = true;
     $('clear-photo').hidden = true;   // 사진은 잠시 뒤에 찍혀서 채워진다
@@ -2019,7 +2019,8 @@ class UI {
     $('clear-falls').textContent = `${falls}번`;
     $('clear-try').textContent = `${tries}번째`;
     $('clear-best').textContent = best ? `${fmt(best.time)} · 추락 ${best.falls}번` : '-';
-    $('clear-new').hidden = !isNew;
+    $('clear-new').textContent = practice ? '연습 모드라 기록이 인정되지 않아요' : '새 최고 기록!';
+    $('clear-new').hidden = !isNew && !practice;
     this.show('clear');
   }
 }
@@ -2918,6 +2919,7 @@ class Game {
     POSE.TILT_SENSITIVITY = s.tilt;
     CONFIG.STAMINA_ENABLED = s.stamina;   // 끄면 무한 체력(연습 모드)
     if (!s.stamina && this.p) this.p.stamina = CONFIG.STAMINA_MAX;
+    if (!s.stamina) this.practice = true;   // 한 번이라도 끄면 이번 판은 기록 미인정 (다시 켜도 그대로)
     this.sound.volume = s.volume;
     this.sound.setMuted(s.muted);
     this.ui.setMuted(s.muted);
@@ -2984,6 +2986,7 @@ class Game {
     saveJSON(TRIES_KEY, this.tries);
     this.ui.setTries(this.tries);
     this.photo = null;
+    this.practice = !CONFIG.STAMINA_ENABLED;   // 연습 모드(무한 체력)로 시작하면 기록 미인정
     this.cpIndex = 0;
     this.maxSection = 0;
     this.respawn(0);
@@ -3120,9 +3123,9 @@ class Game {
     this.clearT = 0;
     // 최고 기록: 시간이 빠를수록, 같으면 추락이 적을수록
     const rec = { time: this.stats.time, falls: this.stats.falls };
-    const isNew = !this.best || rec.time < this.best.time;
+    const isNew = !this.practice && (!this.best || rec.time < this.best.time);
     if (isNew) { this.best = rec; saveJSON(BEST_KEY, rec); }
-    this.ui.showClear(this.stats, this.best, isNew, this.tries);
+    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
@@ -3355,7 +3358,7 @@ class Game {
       if (!cp.activated) {
         this.level.activateCheckpoint(cp);
         p.stamina = CONFIG.STAMINA_MAX;
-        this.ui.toast(`체크포인트 ${cp.index} / ${this.level.checkpoints.length - 1}`, 'gold');
+        this.ui.toast(`체크포인트 ${cp.index} / ${this.level.checkpoints.length - 1}` + (this.practice ? ' · 연습 모드라 기록 미인정' : ''), 'gold');
         this.photoTitle = `체크포인트 ${cp.index} 도착 · ${SECTIONS[cp.index - 1].name} 통과`;
         this.sound.checkpoint();
         this.feathers.emit(_desired.copy(cp.position).add(new THREE.Vector3(0, 2.4, 0)), 36, 0xf4c542, { speed: 7, up: 3, size: 0.26, life: 2.2 });
@@ -3576,6 +3579,12 @@ class Game {
     const now = new Date();
     x.font = `26px ${font}`; x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.9)';
     x.fillText(`짭새의 모험 · ${now.toLocaleDateString('ko-KR')}`, W - 40, 52);
+    if (this.practice) {   // 연습 판 사진은 기록이 아님을 분명히
+      x.textAlign = 'left'; x.font = `28px ${font}`;
+      const label = '연습 모드 · 기록 미인정', w = x.measureText(label).width + 36;
+      x.fillStyle = '#e8604c'; x.beginPath(); x.roundRect(36, 24, w, 48, 24); x.fill();
+      x.fillStyle = '#fff'; x.fillText(label, 54, 58);
+    }
     const two = (n) => String(n).padStart(2, '0');   // 파일 이름용 현지 시각 20261031-0915
     const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
     this.photo = { canvas: c, name: `짭새의모험_${title.split(' ·')[0].replace(/[ !]/g, '')}_${stamp}.png` };
