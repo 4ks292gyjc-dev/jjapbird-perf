@@ -592,7 +592,8 @@ class Level {
     m.position.set(x, y, z);
     m.scale.set(sx, sy, sz);
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
-    m.castShadow = this.ctx.shadow;
+    // 그림자는 새만 만든다(착지 지점 표시용). 코스는 받기만 해서 그림자 패스를 가볍게
+    m.castShadow = false;
     m.receiveShadow = this.ctx.shadow;
     parent.add(m);
     return m;
@@ -923,9 +924,8 @@ class Level {
     shaft.position.y = -0.4;
     f.add(shaft);
     f.rotation.z = 0.35;
-    const light = new THREE.PointLight(0xffd970, 6, 14, 1.6);
-    f.add(light);
-    f.userData = { vane, light };
+    // 점조명은 화면 전체 픽셀 비용이 들어서 빼고, 깃털 자체 발광(emissive)으로만 빛나게 한다
+    f.userData = { vane };
     return f;
   }
 
@@ -958,7 +958,7 @@ class Level {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(3.2, 1.1, 5, 12), mat(0x8a6234));
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.6;
-    ring.castShadow = true;
+    ring.receiveShadow = true;
     g.add(ring);
     for (let i = 0; i < 22; i++) {
       const a = (i / 22) * Math.PI * 2;
@@ -1272,7 +1272,6 @@ class Level {
     if (cp.feather) {
       cp.feather.userData.vane.material.emissive.setHex(0xffb000);
       cp.feather.userData.vane.material.emissiveIntensity = 1.6;
-      cp.feather.userData.light.intensity = 12;
     }
     if (cp.beam) cp.beam.visible = false;
   }
@@ -1284,7 +1283,6 @@ class Level {
       if (cp.feather) {
         cp.feather.userData.vane.material.emissive.setHex(0xf4c542);
         cp.feather.userData.vane.material.emissiveIntensity = 0.9;
-        cp.feather.userData.light.intensity = 6;
       }
       if (cp.beam) cp.beam.visible = true;
     }
@@ -2628,7 +2626,8 @@ class Game {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1 : 1.5));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // Soft 보다 가볍고, 로우폴리라 차이가 거의 안 보임
+    this.perf = { t: 0, frames: 0 };                   // 해상도 자동 조절용
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x9fd4f5);
@@ -2766,6 +2765,16 @@ class Game {
     return new THREE.Points(g, new THREE.PointsMaterial({
       color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false,
     }));
+  }
+
+  // 2초 평균 FPS 가 45 아래면 픽셀 비율을 1로 낮춘다. 한 번만 내리고 다시 올리지 않음(깜빡임 방지)
+  _adaptResolution(raw) {
+    if (raw > 0.25 || this.renderer.getPixelRatio() <= 1) return; // 탭 전환 직후 같은 긴 프레임은 무시
+    const f = this.perf;
+    f.t += raw; f.frames++;
+    if (f.t < 2) return;
+    if (f.frames / f.t < 45) this.renderer.setPixelRatio(1);
+    f.t = 0; f.frames = 0;
   }
 
   _resize() {
@@ -3252,7 +3261,9 @@ class Game {
 
   // ── 메인 루프 ──
   tick() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const raw = this.clock.getDelta();
+    const dt = Math.min(raw, 0.05);
+    this._adaptResolution(raw);
     const p = this.p;
     this.input.update(dt);
     const flaps = this.input.consumeFlaps();
