@@ -201,6 +201,11 @@
   .settings label.switch span { display: grid; gap: 2px; }
   .settings label.switch small { color: var(--ink-soft); font-size: 0.8rem; }
   .record dd.best { font-size: 1.05rem; padding-top: 4px; }
+  #photo-card { position: absolute; right: 22px; bottom: 150px; width: min(260px, 60vw); margin: 0; padding: 10px; display: grid; gap: 8px;
+    background: var(--paper); border-radius: 18px; box-shadow: 0 10px 30px rgba(27,35,64,.3); pointer-events: auto; }
+  #photo-card img, .clear-photo { width: 100%; border-radius: 10px; display: block; }
+  .clear-photo { margin: 0 0 16px; }
+  #clear .btn + .btn { margin-left: 8px; }
   .new-record { margin: -12px 0 20px; font-family: var(--display); font-size: 1.3rem; color: var(--gold-deep); }
 
   /* HUD 버튼 (일시정지·소리) */
@@ -335,7 +340,14 @@
     <div><span>구간</span><b id="stat-section">1구간</b></div>
     <div><span>시간</span><b id="stat-time">0:00</b></div>
     <div><span>추락</span><b id="stat-falls">0</b></div>
+    <div><span>시도</span><b id="stat-try">1</b></div>
   </div>
+
+  <!-- 체크포인트 기념사진: 찍히면 잠깐 떠 있고, 저장 버튼(또는 C 키)으로 내려받는다 -->
+  <figure id="photo-card" hidden>
+    <img id="photo-img" alt="방금 찍은 기념사진">
+    <button class="btn" id="photo-save">기념사진 저장 <kbd>C</kbd></button>
+  </figure>
 
   <div class="cluster">
     <div id="flap-ind" title="날갯짓 감지">
@@ -351,7 +363,7 @@
 
   <div class="keys-hint">
     <kbd>Space</kbd> 날갯짓 &nbsp; <kbd>A</kbd><kbd>D</kbd> 기울이기 &nbsp; <kbd>Shift</kbd> 활공<br>
-    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 가 본 체크포인트로
+    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 가 본 체크포인트로 &nbsp; <kbd>C</kbd> 기념사진 저장
   </div>
 
   <!-- 터치 버튼 (폰·패드) -->
@@ -442,10 +454,13 @@
     <dl class="record">
       <dt>걸린 시간</dt><dd id="clear-time">0분 00초</dd>
       <dt>추락</dt><dd id="clear-falls">0번</dd>
+      <dt>시도</dt><dd id="clear-try">1번째</dd>
       <dt>최고 기록</dt><dd id="clear-best" class="best">-</dd>
     </dl>
     <p id="clear-new" class="new-record" hidden>새 최고 기록!</p>
+    <img id="clear-photo" class="clear-photo" alt="클리어 기념사진">
     <button class="btn" id="btn-again">다시 도전하기</button>
+    <button class="btn ghost" id="btn-photo">기념사진 저장</button>
   </div>
 </section>
 
@@ -1715,6 +1730,9 @@ return { Bird, Feathers };
 })();
 const { Bird, Feathers } = BirdMod;
 // ===== ui.js =====
+// 0분 00초
+function fmtTime(t) { const s = Math.floor(t); return `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, '0')}초`; }
+
 const UIMod = (() => {
 // ui.js — 메뉴, HUD, 일시정지, 클리어 화면 (DOM)
 // 2단계: 카메라 시작, 로딩, 캘리브레이션, 자동 일시정지, 웹캠 창(뼈대 표시)
@@ -1724,7 +1742,7 @@ const UIMod = (() => {
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -1761,6 +1779,8 @@ class UI {
     $('btn-resume').addEventListener('click', onResume);
     $('btn-restart').addEventListener('click', onRestart);
     $('btn-again').addEventListener('click', onRestart);
+    $('photo-save').addEventListener('click', onPhoto);
+    $('btn-photo').addEventListener('click', onPhoto);
 
     this.el = {
       height: $('alt-now'),
@@ -1768,6 +1788,7 @@ class UI {
       fill: $('alt-fill'),
       time: $('stat-time'),
       falls: $('stat-falls'),
+      tries: $('stat-try'),
       section: $('stat-section'),
       stamina: $('stamina-fill'),
       staminaBox: $('stamina'),
@@ -1978,10 +1999,24 @@ class UI {
     b.classList.add('on');
   }
 
-  showClear({ time, falls }, best, isNew) {
-    const fmt = (t) => { const s = Math.floor(t); return `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, '0')}초`; };
+  // 기념사진 미리보기: 체크포인트에서는 잠깐 띄우고, 클리어 화면에는 패널 안에
+  showPhoto(url, clear = false) {
+    if (clear) { $('clear-photo').src = url; $('clear-photo').hidden = false; return; }
+    $('photo-img').src = url;
+    $('photo-card').hidden = false;
+    clearTimeout(this._photoTimer);
+    this._photoTimer = setTimeout(() => { $('photo-card').hidden = true; }, 9000);
+  }
+
+  setTries(n) { this.el.tries.textContent = n; }
+
+  showClear({ time, falls }, best, isNew, tries) {
+    const fmt = fmtTime;
+    $('photo-card').hidden = true;
+    $('clear-photo').hidden = true;   // 사진은 잠시 뒤에 찍혀서 채워진다
     $('clear-time').textContent = fmt(time);
     $('clear-falls').textContent = `${falls}번`;
+    $('clear-try').textContent = `${tries}번째`;
     $('clear-best').textContent = best ? `${fmt(best.time)} · 추락 ${best.falls}번` : '-';
     $('clear-new').hidden = !isNew;
     this.show('clear');
@@ -2588,6 +2623,7 @@ if (IS_TOUCH) {
 // 설정 저장 (감도·볼륨). 저장소를 못 쓰는 환경이면 기본값으로
 const SETTINGS_KEY = 'jjapsae-settings';
 const BEST_KEY = 'jjapsae-best';
+const TRIES_KEY = 'jjapsae-tries';   // 지금까지 게임을 시작한 횟수
 const DEFAULT_SETTINGS = { flap: 1, tilt: 1, volume: 0.7, muted: false, stamina: true, tutorial: true };
 
 // ─────────────────────────────────────────────────────────────
@@ -2806,6 +2842,7 @@ class Game {
       onStartKeyboard: () => { this.sound.init(); this.mode = 'keyboard'; this.start(); },
       onResume: () => this.resume(),
       onRestart: () => { this.sound.init(); this.start(); },
+      onPhoto: () => this.savePhoto(),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
@@ -2927,6 +2964,7 @@ class Game {
     if (e.code === 'Enter' && this.tutorial && TUTORIAL_STEPS[this.tutorial.i].final) this.endTutorial(false);
     if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
     if (e.code === 'KeyM') this.applySettings({ ...this.settings, muted: !this.settings.muted });
+    if (e.code === 'KeyC') this.savePhoto();
     // 숫자키 1 = 출발점, 2~4 = 체크포인트 1~3. 도착한 적 있는 곳으로만 바로 이동
     if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
@@ -2941,6 +2979,10 @@ class Game {
   start() {
     this.level.resetCheckpoints();
     this.stats = { time: 0, falls: 0 };
+    this.tries = loadJSON(TRIES_KEY, 0) + 1;
+    saveJSON(TRIES_KEY, this.tries);
+    this.ui.setTries(this.tries);
+    this.photo = null;
     this.cpIndex = 0;
     this.maxSection = 0;
     this.respawn(0);
@@ -3079,7 +3121,7 @@ class Game {
     const rec = { time: this.stats.time, falls: this.stats.falls };
     const isNew = !this.best || rec.time < this.best.time;
     if (isNew) { this.best = rec; saveJSON(BEST_KEY, rec); }
-    this.ui.showClear(this.stats, this.best, isNew);
+    this.ui.showClear(this.stats, this.best, isNew, this.tries);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
@@ -3313,6 +3355,7 @@ class Game {
         this.level.activateCheckpoint(cp);
         p.stamina = CONFIG.STAMINA_MAX;
         this.ui.toast(`체크포인트 ${cp.index} / ${this.level.checkpoints.length - 1}`, 'gold');
+        this.photoTitle = `체크포인트 ${cp.index} 도착 · ${SECTIONS[cp.index - 1].name} 통과`;
         this.sound.checkpoint();
         this.feathers.emit(_desired.copy(cp.position).add(new THREE.Vector3(0, 2.4, 0)), 36, 0xf4c542, { speed: 7, up: 3, size: 0.26, life: 2.2 });
       }
@@ -3457,6 +3500,8 @@ class Game {
     if (this.state === 'clear') {
       const prev = this.clearT;
       this.clearT += dt;
+      // 카메라가 둥지를 돌며 독수리를 비출 때쯤 클리어 기념사진
+      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = '클리어! 둥지 도착';
       if (this.clearT < 4.5 && Math.floor(prev / 0.7) !== Math.floor(this.clearT / 0.7)) {
         this.bird.triggerFlap(1);
         this.feathers.emit(p.pos, 8, 0xf4c542, { speed: 4, up: 3, size: 0.22 });
@@ -3507,6 +3552,45 @@ class Game {
     }
 
     this.renderer.render(this.scene, this.camera);
+    // 기념사진은 방금 그린 화면으로 만든다 (다음 프레임이 되면 캔버스 내용이 사라짐)
+    if (this.photoTitle) { this._makePhoto(this.photoTitle); this.photoTitle = null; }
+  }
+
+  // 기념사진 = 게임 화면 + 그 순간까지의 기록 (UI 는 DOM 이라 사진에 안 들어간다)
+  _makePhoto(title) {
+    const W = 1280, H = 720, src = this.renderer.domElement;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const k = Math.max(W / src.width, H / src.height);   // 화면을 꽉 채우게 자른다
+    x.drawImage(src, (W - src.width * k) / 2, (H - src.height * k) / 2, src.width * k, src.height * k);
+    const g = x.createLinearGradient(0, H - 240, 0, H);
+    g.addColorStop(0, 'rgba(27,35,64,0)'); g.addColorStop(1, 'rgba(27,35,64,.88)');
+    x.fillStyle = g; x.fillRect(0, H - 240, W, 240);
+    const font = getComputedStyle(document.documentElement).getPropertyValue('--display');
+    x.fillStyle = '#fff';
+    x.font = `56px ${font}`; x.fillText(title, 48, H - 118);
+    x.font = `32px ${font}`;
+    x.fillText(`타이머 ${fmtTime(this.stats.time)}  ·  ${this.tries}번째 시도  ·  추락 ${this.stats.falls}번  ·  고도 ${Math.round(this.p.pos.y)}m`, 48, H - 62);
+    const now = new Date();
+    x.font = `26px ${font}`; x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.9)';
+    x.fillText(`짭새의 모험 · ${now.toLocaleDateString('ko-KR')}`, W - 40, 52);
+    const two = (n) => String(n).padStart(2, '0');   // 파일 이름용 현지 시각 20261031-0915
+    const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
+    this.photo = { canvas: c, name: `짭새의모험_${title.split(' ·')[0].replace(/[ !]/g, '')}_${stamp}.png` };
+    this.ui.showPhoto(c.toDataURL('image/jpeg', 0.7), this.state === 'clear');
+  }
+
+  savePhoto() {
+    const ph = this.photo;
+    if (!ph) { this.ui.toast('아직 찍은 기념사진이 없어요'); return; }
+    ph.canvas.toBlob((blob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = ph.name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
   }
 }
 
