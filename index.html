@@ -351,7 +351,7 @@
 
   <div class="keys-hint">
     <kbd>Space</kbd> 날갯짓 &nbsp; <kbd>A</kbd><kbd>D</kbd> 기울이기 &nbsp; <kbd>Shift</kbd> 활공<br>
-    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 구간 이동(테스트)
+    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 가 본 체크포인트로
   </div>
 
   <!-- 터치 버튼 (폰·패드) -->
@@ -2575,7 +2575,6 @@ const CONFIG = {
   KEY_TILT_RATE: 3.5,        // 키를 누르고 있을 때 기울기가 차오르는 속도
   KEY_FLAP_STRENGTH: 0.75,   // 키보드 날갯짓의 동작 크기(0..1)
 
-  DEBUG: true,               // 숫자키 1~4 = 해당 구간 시작점으로 이동
 };
 
 // 터치 기기(폰·패드)인지: 터치 버튼을 보이고 그래픽·인식 부하를 낮춘다
@@ -2928,13 +2927,13 @@ class Game {
     if (e.code === 'Enter' && this.tutorial && TUTORIAL_STEPS[this.tutorial.i].final) this.endTutorial(false);
     if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
     if (e.code === 'KeyM') this.applySettings({ ...this.settings, muted: !this.settings.muted });
-    if (CONFIG.DEBUG && /^Digit[1-4]$/.test(e.code)) {
-      const idx = Number(e.code.slice(5)) - 1;          // 0..3
-      for (const cp of this.level.checkpoints) if (cp.index > 0 && cp.index <= idx) this.level.activateCheckpoint(cp);
+    // 숫자키 1 = 출발점, 2~4 = 체크포인트 1~3. 도착한 적 있는 곳으로만 바로 이동
+    if (/^Digit[1-4]$/.test(e.code)) {
+      const idx = Number(e.code.slice(5)) - 1;
+      if (!this.level.checkpoints[idx].activated) { this.ui.toast('아직 못 가 본 체크포인트예요', 'warn'); return; }
       this.cpIndex = idx;
-      this.maxSection = idx;
       this.respawn(idx);
-      this.ui.toast(`디버그: ${idx + 1}구간 시작점`);
+      this.ui.toast(idx ? `체크포인트 ${idx}(으)로 이동` : '출발점으로 이동');
     }
   }
 
@@ -3306,11 +3305,12 @@ class Game {
   checkProgress() {
     const p = this.p;
     for (const cp of this.level.checkpoints) {
-      if (cp.activated) continue;
       const dx = p.pos.x - cp.position.x, dz = p.pos.z - cp.position.z, dy = p.pos.y - cp.position.y;
-      if (dx * dx + dz * dz < 7.5 * 7.5 && dy > -1 && dy < 4.5) {
+      if (!(dx * dx + dz * dz < 7.5 * 7.5 && dy > -1 && dy < 4.5)) continue;
+      // 숫자키로 낮은 체크포인트에 갔다가 다시 지나가도 복귀 지점은 올라간다
+      if (cp.index > this.cpIndex) this.cpIndex = cp.index;
+      if (!cp.activated) {
         this.level.activateCheckpoint(cp);
-        if (cp.index > this.cpIndex) this.cpIndex = cp.index;
         p.stamina = CONFIG.STAMINA_MAX;
         this.ui.toast(`체크포인트 ${cp.index} / ${this.level.checkpoints.length - 1}`, 'gold');
         this.sound.checkpoint();
