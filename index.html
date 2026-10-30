@@ -661,11 +661,13 @@ class Level {
     const g = new THREE.Group();
     this.root.add(g);
     this.box(g, 340, 6, 340, 0x6f6a63, 0, -3, 0);              // 지면 (윗면 y=0)
+    this.colliders[this.colliders.length - 1].floor = true;     // 맨 밑 바닥: 닿으면 체크포인트로 복귀
     // 깨진 도로 판
     for (let i = 0; i < 26; i++) {
       const a = this.r(0, Math.PI * 2), rr = this.r(20, 150);
       this.box(g, this.r(6, 14), 0.4, this.r(6, 14), this.pick([0x57534e, 0x625d57, 0x4d4945]),
         Math.cos(a) * rr, 0.2, Math.sin(a) * rr, { rot: [0, this.r(0, 3), this.r(-0.05, 0.05)], landable: true });
+      this.colliders[this.colliders.length - 1].floor = true;   // 도로 판도 바닥으로 친다
     }
     // 낮은 폐건물 (경로 바깥쪽)
     for (let i = 0; i < 34; i++) {
@@ -884,16 +886,20 @@ class Level {
     return f;
   }
 
+  // 체크포인트 위치를 알려주는 빛기둥: 발판에서 위로만 솟고, 위로 갈수록 옅어진다
+  // (예전에는 발판 아래로도 110m 뻗어서, 아래 구간에서 보면 허공에 노란 기둥만 떠 있는 것처럼 보였다)
   _makeBeam(color) {
-    const m = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.2, 1.2, 220, 10, 1, true),
-      new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.18, depthWrite: false,
+    const g = new THREE.Group();
+    const layers = [[0, 30, 0.22], [30, 70, 0.12], [70, 130, 0.05]];
+    for (const [from, to, opacity] of layers) {
+      const geo = new THREE.CylinderGeometry(0.9, 0.9, to - from, 10, 1, true);
+      geo.translate(0, (from + to) / 2, 0);
+      g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity, depthWrite: false,
         blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-      }),
-    );
-    m.position.y = 0;
-    return m;
+      })));
+    }
+    return g;
   }
 
   // ── 둥지 (최종 목적지) ──
@@ -2694,6 +2700,7 @@ class Game {
     p.stamina = CONFIG.STAMINA_MAX;
     p.airPeak = p.pos.y;
     p.fallCounted = false;
+    this.onFloor = false;
     this.camYaw = cp.yaw;
     _off.set(0, CONFIG.CAM_HEIGHT, CONFIG.CAM_DISTANCE).applyAxisAngle(UP, this.camYaw);
     this.camera.position.copy(p.pos).add(_off);
@@ -2794,6 +2801,10 @@ class Game {
     const vyBefore = p.vel.y, wasGrounded = p.grounded;
     this.collide();
     if (p.grounded && !wasGrounded && vyBefore < -3 && this.state === 'playing') this.sound.land(-vyBefore);
+    if (p.grounded && p.ground?.floor && this.state === 'playing' && !this.onFloor) {
+      this.onFloor = true;
+      this.floorFallCounted = p.fallCounted;   // 공중에서 이미 추락으로 셌는지 (중복 방지)
+    }
 
     // 10) 맵 경계: 너무 멀리 가면 부드럽게 안쪽으로
     const r = Math.hypot(p.pos.x, p.pos.z);
@@ -2898,6 +2909,16 @@ class Game {
     const ndx = p.pos.x - n.x, ndz = p.pos.z - n.z;
     if (ndx * ndx + ndz * ndz < (this.level.nest.radius + 0.5) ** 2 && p.pos.y > n.y - 0.5 && p.pos.y < n.y + 4) {
       this.clear();
+      return;
+    }
+
+    // 맨 밑 바닥에 닿으면 마지막 체크포인트(없으면 출발점)로 돌아간다
+    if (this.onFloor) {
+      this.onFloor = false;
+      if (!this.floorFallCounted) this.stats.falls++;
+      this.respawn(this.cpIndex);
+      this.ui.toast(this.cpIndex > 0 ? '바닥에 떨어졌어요! 체크포인트로 돌아가요' : '바닥에 떨어졌어요! 출발점으로 돌아가요', 'warn');
+      this.sound.respawn();
       return;
     }
 
