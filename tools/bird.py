@@ -12,11 +12,23 @@
 import bpy, bmesh, math, sys, os
 from mathutils import Vector
 
+#   열려 있는 블렌더에서 돌리면 장면은 그대로 두고 'jjapbird' 컬렉션에만 새를 다시 만든다(내보내기 없음)
+
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-OUT = os.path.abspath(argv[0] if argv else 'bird.glb')
+OUT = os.path.abspath(argv[0]) if argv else None
 RENDER = '--render' in argv
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
+if bpy.app.background:
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+COLL = bpy.data.collections.get('jjapbird')
+if COLL:   # 이전에 만든 새만 지운다
+    for ob in list(COLL.objects):
+        me = ob.data
+        bpy.data.objects.remove(ob)
+        bpy.data.meshes.remove(me)
+else:
+    COLL = bpy.data.collections.new('jjapbird')
+    bpy.context.scene.collection.children.link(COLL)
 
 # three (x, y, z) → blender (x, -z, y). glTF 내보내기가 다시 Y-up 으로 돌려준다
 def B(p): return Vector((p[0], -p[2], p[1]))
@@ -26,6 +38,7 @@ PALETTE = {
     'body': 0x8a5a3b, 'back': 0x6e4630, 'belly': 0xead7b4, 'head': 0x6e4630,
     'cheek': 0xf3ead8, 'bib': 0x2a1d16, 'beak': 0xf2b33d, 'eye': 0x141414, 'shine': 0xffffff,
     'wingIn': 0x7a4e30, 'wingBar': 0xf1e2c2, 'wingOut': 0x4a3222, 'tail': 0x5a3b27,
+    'feet': 0xd9944a,
 }
 def srgb_to_lin(c):
     c /= 255
@@ -36,7 +49,7 @@ def mat(name):
     if name not in MATS:
         h = PALETTE[name]
         rgb = [srgb_to_lin((h >> s) & 255) for s in (16, 8, 0)]
-        m = bpy.data.materials.new(name)
+        m = bpy.data.materials.get('jj_' + name) or bpy.data.materials.new('jj_' + name)
         m.use_nodes = True
         bsdf = m.node_tree.nodes['Principled BSDF']
         bsdf.inputs['Base Color'].default_value = (*rgb, 1)
@@ -58,18 +71,18 @@ class Part:
 
     def face(self, idx, m): self.faces.append(idx); self.fmat.append(self._mi(m))
 
-    def sphere(self, c, r, m, seg=10, rings=8, paint=None):
-        """타원체. paint(face_center_rel, i) → 재질 이름 (없으면 m)"""
+    def sphere(self, c, r, m, seg=10, rings=8, paint=None, warp=None):
+        """타원체. paint(face_center_rel, i) → 재질 이름 (없으면 m), warp(x,y,z) → 모양 변형"""
         base = len(self.verts)
-        self.verts.append((c[0], c[1] + r[1], c[2]))
+        w = warp or (lambda x, y, z: (x, y, z))
+        put = lambda x, y, z: self.verts.append(tuple(c[a] + v for a, v in enumerate(w(x, y, z))))
+        put(0, r[1], 0)
         for i in range(1, rings):
             th = math.pi * i / rings
             for j in range(seg):
                 ph = 2 * math.pi * j / seg
-                self.verts.append((c[0] + r[0] * math.sin(th) * math.cos(ph),
-                                   c[1] + r[1] * math.cos(th),
-                                   c[2] + r[2] * math.sin(th) * math.sin(ph)))
-        bot = len(self.verts); self.verts.append((c[0], c[1] - r[1], c[2]))
+                put(r[0] * math.sin(th) * math.cos(ph), r[1] * math.cos(th), r[2] * math.sin(th) * math.sin(ph))
+        bot = len(self.verts); put(0, -r[1], 0)
         ring = lambda i, j: base + 1 + (i - 1) * seg + j % seg
         quads = [[base, ring(1, j + 1), ring(1, j)] for j in range(seg)]
         for i in range(1, rings - 1):
@@ -114,7 +127,7 @@ class Part:
         bm.to_mesh(me); bm.free()
         ob = bpy.data.objects.new(self.name, me)
         ob.location = B(self.pivot)
-        bpy.context.scene.collection.objects.link(ob)
+        COLL.objects.link(ob)
         return ob
 
 def rot(a, ox=0.0, oz=0.0, sx=1):
@@ -127,27 +140,37 @@ def feather(L, W):
     return [(0, -W * 0.35), (L * 0.2, -W * 0.5), (L * 0.75, -W * 0.45), (L * 0.95, -W * 0.15), (L, 0.05 * W),
             (L * 0.85, W * 0.5), (L * 0.2, W * 0.5), (0, W * 0.35)]
 
-# ── 몸통: 앞이 통통한 알 모양. 배는 크림색, 등에는 짙은 줄무늬 ──
+# ── 몸통: 앞은 통통하고 꼬리 쪽으로 가늘어지는 물방울. 배는 크림색, 등에는 짙은 줄무늬, 작은 발 ──
 body = Part('body', (0, 0, 0))
 def body_paint(c, k):
     if c[1] < -0.04 and c[2] < 0.4: return 'belly'
     if c[1] > 0.2 and c[2] > -0.35 and k % 3 == 0: return 'back'
     return None
-body.sphere((0, 0, 0), (0.4, 0.36, 0.64), 'body', seg=12, rings=9, paint=body_paint)
+def body_warp(x, y, z):
+    t = max(0.0, z / 0.64)              # 0(가운데) → 1(꼬리 끝)
+    k = 1 - 0.38 * t * t
+    return (x * k * (1.05 if z < 0 else 1), y * k + 0.06 * t * t, z)
+body.sphere((0, 0, 0), (0.4, 0.36, 0.64), 'body', seg=12, rings=9, paint=body_paint, warp=body_warp)
+for sx in (-1, 1):
+    hip, ankle = (sx * 0.12, -0.28, 0.02), (sx * 0.12, -0.57, 0.08)   # 착지 시 발바닥 ≈ 땅(관절 -0.6)
+    body.cone(hip, ankle, 0.035, 'feet', seg=4)
+    for dx, dz in ((-0.05, -0.15), (0, -0.17), (0.05, -0.15), (0, 0.1)):   # 앞발가락 3 + 뒷발가락 1
+        body.cone(ankle, (ankle[0] + sx * dx, -0.6, ankle[2] + dz), 0.022, 'feet', seg=4)
 body.build()
 
-# ── 머리: 갈색 정수리, 흰 뺨, 까만 턱받이, 노란 부리, 반짝이는 눈, 작은 깃 ──
+# ── 머리: 갈색 정수리, 눈 뒤 밤색 줄, 흰 뺨, 까만 턱받이, 노란 부리, 큰 눈, 작은 깃 ──
 head = Part('head', (0, 0.3, -0.68))
 def head_paint(c, k):
     if abs(c[0]) < 0.13 and c[1] < -0.1 and c[2] < -0.05: return 'bib'
+    if c[2] > -0.08 and 0.0 < c[1] < 0.16 and abs(c[0]) > 0.2: return 'body'
     if c[2] < 0.08 and c[1] < 0.06 and abs(c[0]) > 0.1: return 'cheek'
     return None
 head.sphere((0, 0, 0), (0.32, 0.3, 0.33), 'head', seg=12, rings=9, paint=head_paint)
 head.cone((0, 0.0, -0.27), (0, -0.05, -0.52), 0.1, 'beak', seg=6, squash=0.75)
 for sx in (-1, 1):
-    e = Vector((sx * 0.235, 0.07, -0.19))
-    head.sphere(tuple(e), (0.065, 0.065, 0.065), 'eye', seg=8, rings=6)
-    head.sphere(tuple(e + Vector((sx * 0.035, 0.03, -0.035))), (0.02, 0.02, 0.02), 'shine', seg=6, rings=4)
+    e = Vector((sx * 0.24, 0.08, -0.19))
+    head.sphere(tuple(e), (0.078, 0.078, 0.078), 'eye', seg=8, rings=6)
+    head.sphere(tuple(e + Vector((sx * 0.04, 0.035, -0.04))), (0.026, 0.026, 0.026), 'shine', seg=6, rings=4)
 for dz, h in ((0.0, 0.1), (0.09, 0.07)):   # 머리 깃 (살짝 삐친 정도)
     head.cone((0, 0.27, dz), (0, 0.27 + h, dz + 0.1), 0.05, 'head', seg=5)
 head.build()
@@ -166,7 +189,8 @@ for sx, side in ((-1, 'L'), (1, 'R')):
     mirror = lambda x, z, sx=sx: (sx * x, z)
     inner.slab([(0, -0.26), (0.3, -0.3), (0.75, -0.22), (0.75, 0.36), (0.45, 0.4), (0, 0.34)],
                0, 0.07, 'wingIn', mirror)
-    inner.slab([(0.08, 0.02), (0.72, 0.04), (0.72, 0.12), (0.08, 0.1)], 0.04, 0.02, 'wingBar', mirror)
+    for i in range(5):   # 흰 날개띠: 작은 덮깃 한 줄
+        inner.slab(feather(0.17, 0.12), 0.04, 0.02, 'wingBar', rot(math.pi / 2, 0.1 + i * 0.13, -0.02, sx))
     for i in range(5):   # 뒷전의 둘째날개깃
         x0 = 0.06 + i * 0.15
         inner.slab(feather(0.3, 0.17), -0.02, 0.03, 'wingOut', rot(math.pi / 2 - 0.15, x0, 0.25, sx))
@@ -179,12 +203,15 @@ for sx, side in ((-1, 'L'), (1, 'R')):
         outer.slab(feather(L, 0.17), -0.006 * i, 0.035, 'wingOut', rot(a, 0.12, z0, sx))
     outer.build()
 
-os.makedirs(os.path.dirname(OUT), exist_ok=True)
-bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_yup=True,
-                          export_texcoords=False, export_animations=False)
-print('EXPORTED', OUT, os.path.getsize(OUT), 'bytes')
+if OUT:
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    bpy.ops.object.select_all(action='DESELECT')
+    for ob in COLL.objects: ob.select_set(True)
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_yup=True, use_selection=True,
+                              export_texcoords=False, export_animations=False)
+    print('EXPORTED', OUT, os.path.getsize(OUT), 'bytes')
 
-if RENDER:
+if RENDER and OUT:
     sc = bpy.context.scene
     sc.render.engine = 'BLENDER_WORKBENCH'
     sc.display.shading.color_type = 'MATERIAL'
