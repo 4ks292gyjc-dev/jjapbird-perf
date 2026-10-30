@@ -61,13 +61,15 @@ class Kit:
             self.mats[name] = m
         return self.mats[name]
 
-    def export(self, out):
+    def export(self, out, normals=True):
+        """normals=False: 법선 없이 정점을 공유해 파일을 크게 줄인다(게임이 flatShading 재질로 그릴 때만)"""
         if not out: return
         os.makedirs(os.path.dirname(out), exist_ok=True)
         bpy.ops.object.select_all(action='DESELECT')
         for ob in self.coll.objects: ob.select_set(True)
         bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_yup=True, use_selection=True,
-                                  export_texcoords=False, export_animations=False)
+                                  export_texcoords=False, export_animations=False,
+                                  export_normals=normals)
         print('EXPORTED', out, os.path.getsize(out), 'bytes')
 
     def render(self, out, prefix, target, views, res=640, only=None):
@@ -175,6 +177,35 @@ class _Part:
         for i in range(n):
             j = (i + 1) % n
             self.face([b0 + i, b0 + n + i, b0 + n + j, b0 + j], m)
+
+    def poly(self, pts, thick, m):
+        """3D 공간의 볼록 평면 다각형을 법선 방향으로 thick 만큼 두께를 준 판 (돛·박공처럼 세운 판)"""
+        P = [Vector(p) for p in pts]
+        nrm = (P[1] - P[0]).cross(P[2] - P[0]).normalized() * (thick / 2)
+        n, b0 = len(P), len(self.verts)
+        for d in (nrm, -nrm):
+            for p in P: self.verts.append(tuple(p + d))
+        self.face(list(range(b0, b0 + n)), m)
+        self.face(list(reversed(range(b0 + n, b0 + 2 * n))), m)
+        for i in range(n):
+            j = (i + 1) % n
+            self.face([b0 + i, b0 + n + i, b0 + n + j, b0 + j], m)
+
+    def stack(self, rings, m, paint=None, cap_top=True):
+        """세로로 쌓은 고리들(위→아래)로 만든 덩어리. rings=[[(x,y,z)...], ...] 각 고리 점 개수 같음.
+        마지막 고리의 점이 하나면 뾰족한 끝. paint(고리번호) → 재질"""
+        idx = []
+        for ring in rings:
+            b0 = len(self.verts)
+            self.verts.extend(tuple(p) for p in ring)
+            idx.append(list(range(b0, b0 + len(ring))))
+        n = len(idx[0])
+        if cap_top: self.face(list(reversed(idx[0])), (paint and paint(0)) or m)
+        for k, (a, b) in enumerate(zip(idx, idx[1:])):
+            mm = (paint and paint(k)) or m
+            for j in range(n):
+                if len(b) == 1: self.face([a[j], a[(j + 1) % n], b[0]], mm)
+                else: self.face([a[j], a[(j + 1) % n], b[(j + 1) % n], b[j]], mm)
 
     def build(self, bevel=0.0):
         """bevel>0 이면 모서리를 살짝 깎아 빛을 받게 한다(로우폴리에서 가장 싸게 '고급스러워' 보이는 방법)"""
