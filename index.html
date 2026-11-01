@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>짭새의 모험</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +35,9 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd4f5; color: var(--ink); font-family: var(--body); }
   canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   [hidden] { display: none !important; }
+  /* 폰·패드: 두 번 톡 확대, 길게 눌러 글자 선택·복사 메뉴가 뜨지 않게 (게임 화면이라 선택할 글이 없다) */
+  html, body { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
   button { font: inherit; cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 
@@ -213,32 +216,74 @@
   .chip { font-size: 0.85rem; border: 0; border-radius: 999px; padding: 0.45em 0.95em; background: var(--paper); color: var(--ink); box-shadow: 0 2px 8px rgba(27,35,64,.2); }
   .chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
 
-  /* 터치 버튼 */
-  #touch { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end;
-    padding: 0 max(18px, env(safe-area-inset-right, 0px)) max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); pointer-events: none; }
-  .t-group { display: flex; gap: 12px; align-items: flex-end; pointer-events: auto; }
-  .t-btn { width: 74px; height: 74px; border-radius: 50%; border: 0; background: rgba(247,251,255,.78); color: var(--ink);
-    font-family: var(--display); font-size: 1.5rem; box-shadow: 0 4px 14px rgba(27,35,64,.25);
-    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  .t-btn.small { width: 64px; height: 64px; font-size: 1rem; }
-  .t-btn.big { width: 104px; height: 104px; font-size: 1.25rem; background: var(--gold); }
-  .t-btn.down { transform: scale(0.92); filter: brightness(0.92); }
+  /* 터치 조작 (폰·패드): 화면 왼쪽 절반 = 방향 패드(끌기), 오른쪽 절반 = 날갯짓(톡)·활공(꾹) */
+  #touch { position: absolute; inset: 0; display: flex; pointer-events: none; }
+  .t-zone { position: relative; flex: 1; pointer-events: auto; touch-action: none;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  .t-pad { position: absolute; left: max(28px, env(safe-area-inset-left, 0px)); bottom: max(28px, env(safe-area-inset-bottom, 0px));
+    width: 190px; height: 76px; border-radius: 38px; background: rgba(247,251,255,.25); border: 2px solid rgba(255,255,255,.6); }
+  .t-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+    background: rgba(247,251,255,.92); box-shadow: 0 4px 14px rgba(27,35,64,.3); }
+  .t-ring { position: absolute; right: max(28px, env(safe-area-inset-right, 0px)); bottom: max(28px, env(safe-area-inset-bottom, 0px));
+    width: 124px; height: 124px; border-radius: 50%; display: grid; place-content: center; text-align: center; line-height: 1.25;
+    background: rgba(244,197,66,.9); color: var(--ink); font-family: var(--display); font-size: 1.15rem;
+    box-shadow: 0 6px 18px rgba(27,35,64,.3); transition: transform .08s, background .15s; }
+  .t-ring small { font-size: .72rem; opacity: .7; }
+  #t-act.down .t-ring { transform: scale(.92); }
+  #t-act.gliding .t-ring { background: rgba(143,208,255,.95); }
+  .t-hint { position: absolute; font-size: .8rem; color: #fff; text-shadow: 0 1px 4px rgba(27,35,64,.7); }
+  #t-steer .t-hint { left: max(34px, env(safe-area-inset-left, 0px)); bottom: calc(max(28px, env(safe-area-inset-bottom, 0px)) + 86px); }
+  #t-act .t-hint { right: max(28px, env(safe-area-inset-right, 0px)); bottom: calc(max(28px, env(safe-area-inset-bottom, 0px)) + 134px); }
+  /* 화면 전체를 덮는 조작 판 위로 눌러야 하는 것들을 올린다 */
+  .hud-btns, #photo-card, #coach { z-index: 1; }
 
-  /* 터치 모드: 아래쪽은 버튼에 양보하고 계기판은 위로 */
-  body.touch { touch-action: manipulation; }
+  /* 터치 모드 배치: 엄지가 닿는 아래쪽은 조작에만 쓰고, 기록·계기판은 위 가장자리로 */
+  body.touch { touch-action: manipulation; overscroll-behavior: none; }   /* 메뉴 스크롤은 살리고, 조작 판(.t-zone)만 none */
   body.touch .keys-hint { display: none; }
-  body.touch .cluster { top: max(12px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 8px 12px; grid-template-columns: auto 130px auto; gap: 10px; }
-  body.touch #flap-ind { width: 42px; height: 42px; }
-  body.touch #flap-ind svg { width: 28px; height: 28px; }
-  body.touch #flight-state { font-size: 0.95rem; min-width: 5.5em; }
-  body.touch .stats { top: auto; bottom: 140px; right: 18px; flex-direction: column; gap: 4px; }
-  body.touch .stats div b { font-size: 1.2rem; }
-  body.touch .hud-btns { top: auto; bottom: 140px; left: 18px; flex-direction: column; }
-  body.touch #toast { top: 84px; }
-  body.touch #cam { bottom: 140px; right: 90px; width: 130px; }
+  body.touch .hud-btns { top: max(12px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+  body.touch .stats { top: max(10px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); gap: 14px; }
+  body.touch .stats div span { font-size: .68rem; }
+  body.touch .stats div b { font-size: 1.15rem; }
+  body.touch .cluster { top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 6px 12px; grid-template-columns: auto 120px auto; gap: 10px; border-radius: 16px; }
+  body.touch #flap-ind { width: 38px; height: 38px; }
+  body.touch #flap-ind svg { width: 24px; height: 24px; }
+  body.touch #flight-state { font-size: 0.9rem; min-width: 5em; }
+  body.touch .altitude { left: max(14px, env(safe-area-inset-left, 0px)); height: 30vh; top: 40%; }   /* 아래 "끌어서 방향" 안내와 안 겹치게 */
+  body.touch .alt-read b { font-size: 1.8rem; }
+  body.touch #toast { top: 72px; }
+  body.touch #photo-card { top: 72px; bottom: auto; right: max(16px, env(safe-area-inset-right, 0px)); width: 190px; }
+  body.touch #cam { top: 72px; bottom: auto; right: max(16px, env(safe-area-inset-right, 0px)); width: 120px; }
+
+  /* 폰 세로: 위 한 줄에 다 안 들어가서 계기판을 한 줄 아래로 */
+  @media (pointer: coarse) and (orientation: portrait) {
+    body.touch .cluster { top: calc(max(10px, env(safe-area-inset-top, 0px)) + 52px); }
+    body.touch #toast, body.touch #photo-card { top: 128px; }
+    body.touch .stats { gap: 10px; }
+    body.touch #hud #coach { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 150px); }   /* 아래쪽 일반 터치 규칙보다 우선 */
+    /* 화면 반쪽(조작 판)보다 넓으면 패드 오른쪽 끝을 누를 때 날갯짓 판에 닿는다 */
+    .t-pad { width: 150px; }
+    .t-ring { width: 108px; height: 108px; font-size: 1rem; }
+    #t-act .t-hint { bottom: calc(max(28px, env(safe-area-inset-bottom, 0px)) + 118px); }
+  }
+  /* 패드(태블릿): 손이 커지는 게 아니라 화면이 커지니, 조작 판을 키우고 엄지 높이로 조금 올린다 */
+  @media (pointer: coarse) and (min-width: 768px) and (min-height: 600px) {
+    .t-pad { width: 250px; height: 96px; border-radius: 48px; left: max(52px, env(safe-area-inset-left, 0px)); bottom: max(56px, env(safe-area-inset-bottom, 0px)); }
+    .t-knob { width: 80px; height: 80px; margin: -40px 0 0 -40px; }
+    .t-ring { width: 160px; height: 160px; font-size: 1.4rem; right: max(52px, env(safe-area-inset-right, 0px)); bottom: max(56px, env(safe-area-inset-bottom, 0px)); }
+    #t-steer .t-hint { left: max(58px, env(safe-area-inset-left, 0px)); bottom: 166px; }
+    #t-act .t-hint { right: max(52px, env(safe-area-inset-right, 0px)); bottom: 232px; }
+    body.touch .stats div b { font-size: 1.45rem; }
+    body.touch .cluster { grid-template-columns: auto 170px auto; padding: 10px 16px; }
+  }
 
   /* 튜토리얼 */
   .tut-toggle { margin-top: 14px; }
+  .stage-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .stage-pick .chip[aria-pressed="true"] { background: var(--gold); color: var(--ink); }
+  .stage-pick .chip { display: inline-flex; align-items: center; gap: 8px; font-size: .95rem; }
+  .stage-pick .diff { padding: 2px 8px; border-radius: 999px; font-size: .82rem; font-weight: 700; color: #fff; }
+  .stage-pick .diff.d0 { background: #3b7d4f; } .stage-pick .diff.d1 { background: #2f6fb0; }
+  .stage-pick .diff.d2 { background: #c9661f; } .stage-pick .diff.d3 { background: #c23b3b; }
   #coach {
     position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: min(440px, 92vw);
     background: var(--paper); border-radius: 20px; padding: 14px 18px 16px; pointer-events: auto;
@@ -264,7 +309,7 @@
   @keyframes hl { 0%, 100% { box-shadow: 0 0 0 0 rgba(244,197,66,.9); } 50% { box-shadow: 0 0 0 9px rgba(244,197,66,0); } }
   #stamina.hl, #tilt-gauge.hl, #flight-state.hl { border-radius: 8px; }
 
-  body.touch #coach { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 102px); }
+  body.touch #coach { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 60px); }
   body.touch.coaching #toast { top: 300px; }
 
   @media (max-width: 860px) {
@@ -288,10 +333,16 @@
 <section id="menu" aria-labelledby="game-title">
   <div class="title-block">
     <h1 class="title" id="game-title"><span class="t1">짭새의</span><span class="t2">모험</span></h1>
-    <p class="tagline">하늘에 떠 있는 집과 컨테이너, 배와 계단을 딛고 꼭대기의 빛나는 둥지까지 올라가세요. 떨어지면 아래 구간부터 다시 올라가야 해요.</p>
+    <p class="tagline">전설의 짭새는 불미스러운 사고로 인하여 서부경찰서에서 쫓겨나 밑바닥 인생으로 떨어지고 말았다.... 국세횡령왕의 타이틀을 빼앗기 위한 방법은 단 하나, 꼭대기로 올라가기뿐이다!!!</p>
     <div class="menu-row">
       <button class="btn" id="btn-start-cam">카메라로 시작</button>
       <button class="btn ghost light" id="btn-start-key">키보드로 시작</button>
+    </div>
+    <div class="stage-pick" role="group" aria-label="단계 선택">
+      <button class="chip" data-stage="0">1단계 · 도시 폐허<span class="diff d0">★☆☆☆ 쉬움</span></button>
+      <button class="chip" data-stage="1">2단계 · 공사장<span class="diff d1">★★☆☆ 보통</span></button>
+      <button class="chip" data-stage="2">3단계 · 공중 정원<span class="diff d2">★★★☆ 어려움</span></button>
+      <button class="chip" data-stage="3">4단계 · 성층권<span class="diff d3">★★★★ 매우 어려움</span></button>
     </div>
     <button class="chip tut-toggle" id="btn-tutorial" aria-pressed="true">튜토리얼 켜짐</button>
     <p id="cam-error" class="cam-error" role="alert" hidden></p>
@@ -363,18 +414,19 @@
 
   <div class="keys-hint">
     <kbd>Space</kbd> 날갯짓 &nbsp; <kbd>A</kbd><kbd>D</kbd> 기울이기 &nbsp; <kbd>Shift</kbd> 활공<br>
-    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 가 본 체크포인트로 &nbsp; <kbd>C</kbd> 기념사진 저장
+    <kbd>R</kbd> 체크포인트로 &nbsp; <kbd>Esc</kbd> 일시정지 &nbsp; <kbd>1</kbd>~<kbd>4</kbd> 단계 선택 &nbsp; <kbd>C</kbd> 기념사진 저장
   </div>
 
   <!-- 터치 버튼 (폰·패드) -->
+  <!-- 화면 왼쪽 절반 = 방향 패드(좌우로 끌기), 오른쪽 절반 = 톡 날갯짓 · 꾹 활공. 손가락이 정확히 버튼 위가 아니어도 된다 -->
   <div id="touch" hidden>
-    <div class="t-group">
-      <button class="t-btn" id="t-left" aria-label="왼쪽으로 기울이기">◀</button>
-      <button class="t-btn" id="t-right" aria-label="오른쪽으로 기울이기">▶</button>
+    <div class="t-zone" id="t-steer" role="slider" aria-label="방향: 왼쪽 화면을 좌우로 끌기" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
+      <span class="t-hint">끌어서 방향</span>
+      <div class="t-pad" id="t-pad"><span class="t-knob" id="t-knob"></span></div>
     </div>
-    <div class="t-group">
-      <button class="t-btn small" id="t-glide">활공</button>
-      <button class="t-btn big" id="t-flap">날갯짓</button>
+    <div class="t-zone" id="t-act" role="button" aria-label="날갯짓: 오른쪽 화면을 톡, 활공: 꾹 누르기">
+      <span class="t-hint">톡 날갯짓 · 꾹 활공</span>
+      <div class="t-ring" id="t-ring">날갯짓<small>꾹: 활공</small></div>
     </div>
   </div>
 
@@ -431,6 +483,7 @@
       <button class="btn" id="btn-resume">계속하기</button>
       <button class="btn ghost" id="btn-recalib" hidden>다시 캘리브레이션</button>
       <button class="btn ghost" id="btn-restart">처음부터 다시</button>
+      <button class="btn ghost" id="btn-stages">스테이지 선택</button>
     </div>
     <div class="settings">
       <h3>설정</h3>
@@ -459,6 +512,7 @@
     </dl>
     <p id="clear-new" class="new-record" hidden>새 최고 기록!</p>
     <img id="clear-photo" class="clear-photo" alt="클리어 기념사진">
+    <button class="btn" id="btn-next">다음 단계</button>
     <button class="btn" id="btn-again">다시 도전하기</button>
     <button class="btn ghost" id="btn-photo">기념사진 저장</button>
   </div>
@@ -489,6 +543,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // ===== level.js =====
 const LevelMod = (() => {
 // level.js — 수직 코스, 장애물, 체크포인트, 둥지, 하늘 분위기
@@ -549,6 +608,24 @@ const G = {
   octa: new THREE.OctahedronGeometry(1, 0),
 };
 
+// 구름 조각 그림: 부드러운 원 여러 개를 겹친 흰 덩어리 (한 번만 만든다)
+let _puffTex = null;
+function cloudPuffTexture() {
+  if (_puffTex) return _puffTex;
+  const S = 128, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 14; i++) {
+    const r = S * (0.16 + 0.12 * Math.abs(Math.sin(i * 7.1)));
+    const px = S / 2 + Math.cos(i * 2.39) * S * 0.2 * (i % 3) / 2, py = S / 2 + Math.sin(i * 2.39) * S * 0.14 * (i % 3) / 2;
+    const g = x.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
+  }
+  _puffTex = new THREE.CanvasTexture(c);
+  _puffTex.colorSpace = THREE.SRGBColorSpace;
+  return _puffTex;
+}
 const matCache = new Map();
 function mat(color, emissive = 0, emissiveIntensity = 1) {
   const key = `${color}-${emissive}-${emissiveIntensity}`;
@@ -563,6 +640,88 @@ function mat(color, emissive = 0, emissiveIntensity = 1) {
 
 // 합쳐진 정적 코스 메시용: mat() 과 같은 질감, 색은 정점마다
 const VERTEX_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0.05 });
+addPhoto(VERTEX_MAT, null);
+
+// 사진 재질 셰이더를 끼워 넣는다. surf: null = 정점마다(합친 정적 메시의 surf 속성), 숫자 = 재질 전체 하나.
+// 투영 좌표는 '크기만 반영한 오브젝트 기준 좌표'라, 움직이고 도는 장애물에도 무늬가 붙어서 같이 움직인다
+// (합친 정적 메시는 이미 월드 좌표라 같은 식으로 그대로 맞는다)
+function addPhoto(m, surf) {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uAtlas = PHOTO.atlas; sh.uniforms.uInvSize = PHOTO.invSize; sh.uniforms.uAvg = PHOTO.avg;
+    const decl = surf == null ? 'attribute float surf;' : `const float surf = ${surf.toFixed(1)};`;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>\n${decl}\nflat varying float vSurf;\nvarying vec3 vPPos;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vSurf = surf;
+vPPos = position * vec3(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz), length(modelMatrix[2].xyz));`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform sampler2D uAtlas; uniform float uInvSize[16]; uniform vec3 uAvg[16];
+flat varying float vSurf; varying vec3 vPPos;
+// 아틀라스 한 칸(id)에서 반복 무늬 읽기. 칸 경계 번짐을 막으려 안쪽 98% 만 쓰고, 밉맵은 반복 전 좌표의 기울기로 고른다
+vec3 atlasTap(int id, vec2 uv) {
+  vec2 cell = vec2(float(id % 4), float(3 - id / 4));
+  vec2 a = (cell + 0.01 + fract(uv) * 0.98) * 0.25;
+  return textureGrad(uAtlas, a, dFdx(uv) * 0.245, dFdy(uv) * 0.245).rgb;
+}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+if (vSurf > -0.5) {
+  int s = int(vSurf + 0.5);
+  bool keepColor = s >= 16;
+  int id = keepColor ? s - 16 : s;
+  vec3 n = abs(normalize(cross(dFdx(vPPos), dFdy(vPPos))));
+  vec3 w = pow(n, vec3(4.0)); w /= w.x + w.y + w.z;
+  vec3 p = vPPos * uInvSize[id];
+  vec3 t = atlasTap(id, p.zy) * w.x + atlasTap(id, p.xz) * w.y + atlasTap(id, p.xy) * w.z;
+  diffuseColor.rgb = keepColor ? diffuseColor.rgb * t / uAvg[id] : t;
+}`);
+  };
+  m.customProgramCacheKey = () => 'photo:' + surf;   // 재질마다 셰이더 코드가 달라서 따로 캐시
+}
+
+// 움직이는 장애물용: mat() 과 같은 질감 + 사진 재질(재질 하나에 surf 하나)
+const photoCache = new Map();
+function photoMat(color, surf) {
+  const key = `${color}|${surf}`;
+  if (!photoCache.has(key)) {
+    const m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.88, metalness: 0.05 });
+    addPhoto(m, surf);
+    photoCache.set(key, m);
+  }
+  return photoCache.get(key);
+}
+
+// ── 실사 재질 ──
+// 실제 사진 재질 16장(Poly Haven CC0)을 4×4 로 묶은 textures.jpg (tools/atlas.py).
+// 모델에 UV 가 없어서 세 방향에서 투영(triplanar)해 입힌다. 합쳐진 정적 메시(VERTEX_MAT)에만 적용.
+// surf 값: -1 = 사진 없음, 0..15 = 사진 그대로, 16..31 = 사진 무늬만 쓰고 원래 색 유지(D)
+const D = (n) => n + 16;
+//                 회반죽 콘크리트 함석 녹슨철 무늬철판 판자 벽돌 기와 아스팔트 잔디 절벽 나무껍질 낙엽 벽돌바닥 이끼바위 블록
+const SURF_SIZE = [3,     3,      2.5, 2,     1.5,    2,   2,   2.5, 5,      4,   6,   1.5,    3,   3,     5,     3];   // 사진 한 장이 덮는 미터
+const SURF_AVG = [[0.67, 0.639, 0.626], [0.446, 0.414, 0.353], [0.666, 0.701, 0.684], [0.636, 0.384, 0.178], [0.241, 0.196, 0.11], [0.42, 0.391, 0.351], [0.557, 0.403, 0.315], [0.35, 0.201, 0.109], [0.355, 0.352, 0.332], [0.592, 0.515, 0.35], [0.486, 0.324, 0.194], [0.372, 0.337, 0.25], [0.557, 0.44, 0.229], [0.392, 0.34, 0.273], [0.431, 0.363, 0.205], [0.271, 0.241, 0.197]];   // 칸별 평균색(sRGB), atlas.py 출력
+// 모델 재질 이름 → surf. 에셋별 표가 먼저, 없으면 재질 이름 표
+const SURF_BY_ASSET = {
+  house_body: { tint: 6, tintdark: D(15), tintlight: D(1) }, house_roof: { tint: D(7), tintdark: D(7) },
+  rock: { tint: 10, tintdark: 10, tintlight: 10 }, asteroid: { tint: D(10), tintdark: D(10), tintlight: D(10) },
+  container: { tint: D(2), tintdark: D(2) }, railcar: { tint: D(2), tintdark: D(2) }, mover: { tint: D(4), tintdark: D(4) },
+  tree: { tint: D(12), tintdark: D(12), tintlight: D(12) }, foliage: { tint: D(12), tintdark: D(12), tintlight: D(12) },
+  island: { tint: 9, tintdark: 9 }, boat: { tint: D(5), tintdark: D(5) },
+  pipe: { tint: D(3), tintdark: D(4) }, girder: { tint: D(3), tintdark: D(3) }, gate_frame: { tint: D(3) },
+  crane_mast: { tint: D(3) }, crane_jib: { tint: D(3) }, trunk: { wood: 11, twigDark: 11 },
+  checkpoint_pad: { tint: D(13), tintlight: D(13), tintdark: D(15) }, road: { tint: 8, tintlight: D(1) },
+  stairs: { tint: D(1), tintdark: D(1), tintlight: D(1) }, slab: { tint: D(1), tintdark: D(1), tintlight: D(1) },
+  wall_panel: { tint: D(15), tintdark: D(15), tintlight: D(15) },
+  building_low: { tint: D(1), tintdark: D(1), tintlight: D(1) }, building_tall: { tint: D(1), tintdark: D(1), tintlight: D(1) },
+  tower_floor: { tint: D(1), tintlight: D(1), tintdark: D(1) },
+  blade_fan: { tint: D(4) }, blade_sail: { tint: D(5) },
+};
+const PHOTO = {   // 사진 재질 셰이더가 함께 쓰는 값 (아틀라스는 loadAssets 에서 채운다)
+  atlas: { value: null },
+  invSize: { value: SURF_SIZE.map((m) => 1 / m) },
+  avg: { value: SURF_AVG.map(([r, g, b]) => { const c = new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace); return new THREE.Vector3(c.r, c.g, c.b); }) },
+};
+const SURF_BY_MAT = { wood: 5, woodLight: 5, twig: 11, twigDark: 11, stone: D(15), brick: 6, steel: D(4), steelDark: D(4),
+  dirt: 10, straw: 9, trim: D(1), roofRed: D(7) };
 
 // 블렌더로 만든 코스 모델 (tools/assets.py → 맨 아래 #assets-glb). 이름 → 원본 Object3D
 // 재질 이름이 tint / tintdark / tintlight 인 부분은 붙일 때 고른 색(그대로·어둡게·밝게)으로 칠하고,
@@ -579,11 +738,17 @@ async function loadAssets() {
       if (!m.isMesh) return;
       const name = m.material.name.replace(/^jj_/, '');
       const hex = m.material.color.getHex();
+      m.userData.surf = SURF_BY_ASSET[o.name]?.[name] ?? SURF_BY_MAT[name];
       if (name in TINT_SCALE) m.userData.tint = TINT_SCALE[name];
       else m.material = name.startsWith('glow') ? mat(hex, hex, 0.8) : mat(hex);
     });
     ASSETS.set(o.name, o);
   }
+  // 실사 재질 사진: 게임을 만들기 전에 받아 둔다 (늦게 오면 그 사이 사진 칸이 검게 보임)
+  const tex = await new THREE.TextureLoader().loadAsync('textures.jpg');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  PHOTO.atlas.value = tex;
 }
 
 // 구간별 팔레트
@@ -615,6 +780,13 @@ class Level {
     // 빌드 컨텍스트: 충돌체 생성 여부, 움직이는 오브젝트 여부, 그림자
     this.ctx = { collide: true, dynamic: false, shadow: true };
 
+    // 단계(구간)별로 따로 보이고 따로 부딪히게: 지금 만드는 단계 번호를 root 에 붙는 것과 충돌체에 적어 둔다.
+    // 단계 경계의 체크포인트는 앞뒤 두 단계에 모두 속한다(this.buildSecs 로 덮어씀)
+    this.buildSec = 0;
+    this.buildSecs = null;
+    const add = this.root.add.bind(this.root);
+    this.root.add = (...objs) => { for (const o of objs) o.userData.sec ??= this.buildSecs ?? [this.buildSec]; return add(...objs); };
+
     this._build();
 
     this.root.updateMatrixWorld(true);
@@ -629,10 +801,10 @@ class Level {
   _mergeStatic() {
     const groups = new Map();
     const v = new THREE.Vector3();
-    this.root.traverse((m) => {
+    for (const top of [...this.root.children]) top.traverse((m) => {
       if (!m.isMesh || !m.userData.static) return;
       const glow = m.material.emissive.getHex() !== 0;
-      const key = `${glow ? m.material.id : 'vc'}|${Math.floor(m.getWorldPosition(v).y / 60)}|${m.receiveShadow}`;
+      const key = `${glow ? m.material.id : 'vc'}|${Math.floor(m.getWorldPosition(v).y / 60)}|${m.receiveShadow}|${top.userData.sec.join(',')}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(m);
     });
@@ -647,6 +819,7 @@ class Level {
           const c = m.material.color, col = new Float32Array(pos.count * 3);
           for (let i = 0; i < col.length; i += 3) { col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b; }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          g.setAttribute('surf', new THREE.BufferAttribute(new Float32Array(pos.count).fill(m.userData.surf ?? -1), 1));
         }
         g.applyMatrix4(m.matrixWorld);
         m.removeFromParent();
@@ -655,8 +828,14 @@ class Level {
       const merged = new THREE.Mesh(mergeGeometries(geos), vc ? VERTEX_MAT : list[0].material);
       merged.receiveShadow = list[0].receiveShadow;
       merged.matrixAutoUpdate = false;
+      merged.userData.sec = key.split('|')[3].split(',').map(Number);
       this.root.add(merged);
     }
+  }
+
+  // 한 단계만 보이게
+  showStage(i) {
+    for (const o of this.root.children) o.visible = o.userData.sec.includes(i);
   }
 
   // ── 랜덤 헬퍼 ──
@@ -673,6 +852,8 @@ class Level {
     m.castShadow = false;
     m.receiveShadow = this.ctx.shadow;
     m.userData.static = !this.ctx.dynamic;   // _mergeStatic 대상
+    if (!emissive) m.userData.surf = D(1);   // 기본 도형도 콘크리트 무늬로 (원래 색 유지)
+    if (this.ctx.dynamic && !emissive) m.material = photoMat(color, D(1));
     parent.add(m);
     return m;
   }
@@ -685,6 +866,7 @@ class Level {
     parent.add(o);
     const c = {
       obj: o,
+      sec: this.buildSecs ?? [this.buildSec],   // 이 충돌체가 살아 있는 단계들
       half: new THREE.Vector3(w / 2, h / 2, d / 2),
       landable,
       dynamic: this.ctx.dynamic,
@@ -720,6 +902,8 @@ class Level {
       m.receiveShadow = this.ctx.shadow;
       m.userData = { ...m.userData, static: !this.ctx.dynamic };   // 복제본끼리 userData 를 공유하지 않게 새 객체
       if (m.userData.tint) m.material = mat(_tmpC.setHex(color).multiplyScalar(m.userData.tint).getHex());
+      // 움직이는 장애물은 합치지 않으므로 여기서 사진 재질로 (합치는 정적 메시는 _mergeStatic 이 처리)
+      if (this.ctx.dynamic && m.userData.surf != null && !m.material.emissive.getHex()) m.material = photoMat(m.material.color.getHex(), m.userData.surf);
     });
     parent.add(o);
     return o;
@@ -752,6 +936,7 @@ class Level {
     this.pathPoints.push(start.clone());
 
     SECTIONS.forEach((sec, si) => {
+      this.buildSec = si;
       this._buildCentralLandmark(sec, si);
       this._buildDecor(sec);
 
@@ -800,7 +985,7 @@ class Level {
   _buildGround() {
     const g = new THREE.Group();
     this.root.add(g);
-    this.box(g, 340, 6, 340, 0x6f6a63, 0, -3, 0);              // 지면 (윗면 y=0)
+    this.box(g, 340, 6, 340, 0x6f6a63, 0, -3, 0).userData.surf = D(8);   // 지면 (윗면 y=0), 아스팔트 무늬
     this.colliders[this.colliders.length - 1].floor = true;     // 맨 밑 바닥: 닿으면 체크포인트로 복귀
     // 깨진 도로 판
     for (let i = 0; i < 26; i++) {
@@ -976,6 +1161,7 @@ class Level {
 
   // ── 체크포인트: 넓은 발판 + 빛나는 깃털 + 빛기둥 ──
   _buildCheckpoint(pos, yaw, sec, index) {
+    this.buildSecs = [index - 1, index];   // 앞 단계의 도착점이자 다음 단계의 출발점
     const g = new THREE.Group();
     g.position.copy(pos);
     g.rotation.y = yaw;
@@ -994,6 +1180,7 @@ class Level {
     g.add(beam);
 
     // 다음 방향 = 이 발판의 진행 방향
+    this.buildSecs = null;
     this.checkpoints.push({
       index, position: pos.clone(), yaw, activated: false, feather, beam, section: index,
     });
@@ -1201,7 +1388,7 @@ class Level {
     for (let i = 0; i < N; i++) seeds.push(new THREE.Vector3(this.rng(), this.rng(), this.rng()));
     const fdir = force.clone().normalize();
     const segLen = updraft ? 2.2 : 1.8;
-    const zone = { box, force, lines };
+    const zone = { box, force, lines, sec: [this.buildSec] };
     this.windZones.push(zone);
 
     const min = box.min, sz = size;
@@ -1307,19 +1494,32 @@ class Level {
     // 구름 (인스턴싱 1회 드로우콜) — 노을/정원 구간 아래쪽에 구름층
     if (sec.theme === 'garden' || sec.theme === 'industry') {
       const n = sec.theme === 'garden' ? 220 : 90;
-      const cloud = new THREE.InstancedMesh(G.ico, new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1 }), n);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+      // 실사 구름: 구름 하나 = 부드러운 구름 조각 5개(점 스프라이트). 크기별로 3묶음 → 그리기 3번.
+      // 난수는 예전과 똑같이 뽑아서 코스 배치는 그대로
+      const puffs = [[], [], []];
       const baseY = sec.theme === 'garden' ? sec.from - 10 : sec.from + 40;
       for (let i = 0; i < n; i++) {
-        // 코스(반지름 29~47m, 장애물 포함 ±9m)를 가리지 않게 75m 바깥에만. 구름 하나가 최대 지름 36m
+        // 코스(반지름 29~47m, 장애물 포함 ±9m)를 가리지 않게 75m 바깥에만
         const a = this.r(0, Math.PI * 2), rr = this.r(75, 190);
-        p.set(Math.cos(a) * rr, baseY + this.r(-8, 8), Math.sin(a) * rr);
-        q.setFromEuler(new THREE.Euler(0, this.r(0, 6), 0));
-        const k = this.r(3, 9);
-        s.set(k * this.r(1.2, 2), k * 0.6, k);
-        cloud.setMatrixAt(i, m4.compose(p, q, s));
+        const cx = Math.cos(a) * rr, cy = baseY + this.r(-8, 8), cz = Math.sin(a) * rr;
+        const yaw = this.r(0, 6), k = this.r(3, 9), sx = k * this.r(1.2, 2);
+        const bucket = k < 5 ? 0 : k < 7 ? 1 : 2;
+        for (let j = 0; j < 5; j++) {
+          const t = yaw + j * 1.257, d = sx * (j % 2 ? 0.25 : 0.5);
+          puffs[bucket].push(cx + Math.cos(t) * d, cy + ((j % 3) - 1) * k * 0.15, cz + Math.sin(t) * d);
+        }
       }
-      this.root.add(cloud);
+      const tint = sec.theme === 'garden' ? 0xf7e6dc : 0xf5f1ea;   // 노을빛·한낮빛
+      puffs.forEach((arr, bi) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+        const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+          map: cloudPuffTexture(), color: tint, size: [34, 48, 66][bi], sizeAttenuation: true,
+          transparent: true, opacity: 0.9, depthWrite: false,
+          toneMapped: false,   // 조명을 안 받는 재질이라 화면 노출(0.5)을 그대로 받으면 회색 구름이 된다
+        }));
+        this.root.add(pts);
+      });
     }
   }
 
@@ -1521,7 +1721,7 @@ class Bird {
   // 날개·머리·꼬리 뼈에 옮겨 준다(_applyRig). 서 있는 자세로 만들어져 있어 날 때는 앞으로 눕힌다.
   async _loadModel() {
     const model = (await new GLTFLoader().loadAsync('eagle.glb')).scene;
-    model.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } });
+    model.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; m.material.envMapIntensity = 0.3; } });
     const old = [];
     this.body.traverse((o) => { if (o.isMesh) old.push(o); });
     for (const m of old) m.removeFromParent();
@@ -1731,6 +1931,9 @@ return { Bird, Feathers };
 })();
 const { Bird, Feathers } = BirdMod;
 // ===== ui.js =====
+// 단계 난이도 (코스는 높이 올라갈수록 발판 간격·장애물이 늘어난다)
+const STAGE_DIFF = ['★☆☆☆ 쉬움', '★★☆☆ 보통', '★★★☆ 어려움', '★★★★ 매우 어려움'];
+
 // 0분 00초
 function fmtTime(t) { const s = Math.floor(t); return `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, '0')}초`; }
 
@@ -1743,7 +1946,7 @@ const UIMod = (() => {
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -1782,6 +1985,9 @@ class UI {
     $('btn-again').addEventListener('click', onRestart);
     $('photo-save').addEventListener('click', onPhoto);
     $('btn-photo').addEventListener('click', onPhoto);
+    $('btn-next').addEventListener('click', onNext);
+    $('btn-stages').addEventListener('click', onStages);
+    for (const b of document.querySelectorAll('.stage-pick .chip')) b.addEventListener('click', () => onStage(Number(b.dataset.stage)));
 
     this.el = {
       height: $('alt-now'),
@@ -1993,7 +2199,7 @@ class UI {
 
   showSection(name, index) {
     const b = this.el.banner;
-    this.el.bannerNum.textContent = `${index + 1}구간`;
+    this.el.bannerNum.textContent = `${index + 1}단계 · ${STAGE_DIFF[index]}`;
     this.el.bannerName.textContent = name;
     b.classList.remove('on');
     void b.offsetWidth;
@@ -2011,7 +2217,14 @@ class UI {
 
   setTries(n) { this.el.tries.textContent = n; }
 
-  showClear({ time, falls }, best, isNew, tries, practice) {
+  // 단계 버튼: 고른 단계를 강조
+  setStages(current) {
+    for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(Number(b.dataset.stage) === current));
+  }
+
+  showClear({ time, falls }, best, isNew, tries, practice, stage) {
+    $('clear-title').textContent = stage < 3 ? `${stage + 1}단계 클리어!` : '둥지에 도착했어요';
+    $('btn-next').hidden = stage >= 3;
     const fmt = fmtTime;
     $('photo-card').hidden = true;
     $('clear-photo').hidden = true;   // 사진은 잠시 뒤에 찍혀서 채워진다
@@ -2624,7 +2837,7 @@ if (IS_TOUCH) {
 
 // 설정 저장 (감도·볼륨). 저장소를 못 쓰는 환경이면 기본값으로
 const SETTINGS_KEY = 'jjapsae-settings';
-const BEST_KEY = 'jjapsae-best';
+const BEST_KEY = 'jjapsae-best';     // 단계별: jjapsae-best-0 ~ 3
 const TRIES_KEY = 'jjapsae-tries';   // 지금까지 게임을 시작한 횟수
 const DEFAULT_SETTINGS = { flap: 1, tilt: 1, volume: 0.7, muted: false, stamina: true, tutorial: true };
 
@@ -2638,30 +2851,30 @@ const TUTORIAL_STEPS = [
     body: {
       camera: '양팔을 어깨 위로 올렸다가 아래로 힘차게 내리세요. 3번 해보세요.',
       keyboard: 'Space 키를 눌러 날갯짓하세요. 3번 해보세요.',
-      touch: '오른쪽 아래 날갯짓 버튼을 3번 눌러보세요.',
+      touch: '화면 오른쪽 아무 데나 톡 치면 날갯짓이에요. 3번 해보세요.',
     },
     tip: '빠르게 반복할수록 빨리 올라가요.',
-    highlight: ['flap-ind', 't-flap'],
+    highlight: ['flap-ind', 't-ring'],
   },
   {
     id: 'glide', need: 1.5, title: '멈추면 활공해요',
     body: {
       camera: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. 양팔을 옆으로 쭉 펴면 더 오래 떠 있어요.',
       keyboard: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. Shift를 누르고 있으면 더 오래 떠 있어요.',
-      touch: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. 활공 버튼을 누르고 있으면 더 오래 떠 있어요.',
+      touch: '날아오른 뒤 날갯짓을 멈추면 천천히 내려가요. 화면 오른쪽을 꾹 누르고 있으면 활공해서 더 오래 떠 있어요.',
     },
     tip: '바닥에 있다면 먼저 날갯짓으로 떠오르세요.',
-    highlight: ['flight-state', 't-glide'],
+    highlight: ['flight-state', 't-ring'],
   },
   {
     id: 'turn', need: Math.PI / 2, title: '방향을 바꿔요',
     body: {
       camera: '몸을 왼쪽이나 오른쪽으로 기울이면 새가 그쪽으로 돌아요. 한 바퀴의 4분의 1만큼 돌아보세요.',
       keyboard: 'A·D 또는 ←·→ 키를 누르고 있으면 돌아요. 4분의 1바퀴 돌아보세요.',
-      touch: '◀ ▶ 버튼을 누르고 있으면 돌아요. 4분의 1바퀴 돌아보세요.',
+      touch: '화면 왼쪽을 누른 채 좌우로 끌면 그쪽으로 돌아요. 많이 끌수록 빨리 돌아요. 4분의 1바퀴 돌아보세요.',
     },
     tip: '발판 위에서도 제자리에서 돌 수 있어요.',
-    highlight: ['tilt-gauge', 't-left', 't-right'],
+    highlight: ['tilt-gauge', 't-pad'],
   },
   {
     id: 'rest', need: 1, title: '발판에서 쉬어요',
@@ -2706,6 +2919,8 @@ function saveJSON(key, value) {
 
 const STEP = 1 / 120;        // 물리 고정 스텝 (빠른 속도에서도 장애물을 뚫지 않게)
 const UP = new THREE.Vector3(0, 1, 0);
+const _sunDir = new THREE.Vector3();
+const ENV_INTENSITY = 0.3;   // 하늘 환경광 세기: 1 이면 물리 하늘이 너무 밝아 장면이 하얗게 뜬다
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
@@ -2744,24 +2959,42 @@ class KeyboardInput {
     addEventListener('blur', () => { this._left = this._right = this.glide = false; });
   }
 
-  // 화면 터치 버튼: 누르는 동안 = 키를 누르고 있는 것과 같다
-  bindTouch({ left, right, flap, glide }) {
-    const hold = (el, on, off) => {
-      el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); el.classList.add('down'); on(); });
-      const up = () => { el.classList.remove('down'); off(); };
-      el.addEventListener('pointerup', up);
-      el.addEventListener('pointercancel', up);
-      el.addEventListener('lostpointercapture', up);
-    };
-    hold(left, () => { this._left = true; }, () => { this._left = false; });
-    hold(right, () => { this._right = true; }, () => { this._right = false; });
-    hold(glide, () => { this.glide = true; }, () => { this.glide = false; });
-    hold(flap, () => { this._flaps.push({ strength: CONFIG.KEY_FLAP_STRENGTH }); this.onTouch?.(); }, () => {});
+  // 폰·패드 조작 판
+  //  - 왼쪽: 처음 닿은 곳을 기준으로 좌우로 끈 만큼 기운다(아날로그). 놓으면 0
+  //  - 오른쪽: 닿는 순간 날갯짓 1회, 0.28초 넘게 누르고 있으면 활공
+  bindTouch({ steer, act, knob, pad }) {
+    let sid = null, x0 = 0;
+    const range = () => pad.clientWidth * 0.42;
+    steer.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); steer.setPointerCapture?.(e.pointerId);
+      sid = e.pointerId; x0 = e.clientX; this._stick = 0; this.onTouch?.();
+    });
+    steer.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== sid) return;
+      this._stick = clamp((e.clientX - x0) / range(), -1, 1);
+      knob.style.transform = `translateX(${this._stick * range()}px)`;
+      steer.setAttribute('aria-valuenow', this._stick.toFixed(2));
+    });
+    const steerEnd = (e) => { if (e.pointerId !== sid) return; sid = null; this._stick = null; knob.style.transform = ''; };
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) steer.addEventListener(t, steerEnd);
+
+    let holdTimer = 0;
+    act.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); act.setPointerCapture?.(e.pointerId);
+      this._flaps.push({ strength: CONFIG.KEY_FLAP_STRENGTH });
+      navigator.vibrate?.(8);   // 안드로이드: 짧은 진동으로 날갯짓 손맛 (아이폰은 무시됨)
+      act.classList.add('down'); this.onTouch?.();
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => { this.glide = true; act.classList.add('gliding'); }, 280);
+    });
+    const actEnd = () => { clearTimeout(holdTimer); this.glide = false; act.classList.remove('down', 'gliding'); };
+    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) act.addEventListener(t, actEnd);
   }
 
   // 키는 0/1 이지만, 몸 기울이기처럼 서서히 차오르게 만든다
   update(dt) {
-    const target = (this._right ? 1 : 0) - (this._left ? 1 : 0);
+    const keys = (this._right ? 1 : 0) - (this._left ? 1 : 0);
+    const target = this._stick != null ? this._stick : keys;   // 터치 패드를 쓰는 중이면 그 값
     const step = CONFIG.KEY_TILT_RATE * dt;
     this.tilt += clamp(target - this.tilt, -step, step);
   }
@@ -2797,7 +3030,10 @@ class Game {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1 : 1.5));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap; // Soft 보다 가볍고, 로우폴리라 차이가 거의 안 보임
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // 실사 느낌: 영화식 톤 매핑(밝은 곳은 부드럽게 눌러 주고 어두운 곳은 깊게)
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.5;   // 물리 하늘은 실제 밝기 단위라 낮게
     this.perf = { t: 0, frames: 0 };                   // 해상도 자동 조절용
 
     this.scene = new THREE.Scene();
@@ -2820,6 +3056,29 @@ class Game {
 
     this.stars = this._makeStars();
     this.scene.add(this.stars);
+
+    // 물리 기반 하늘(대기 산란). 높이 오를수록 해가 져서 노을 → 밤 → 우주가 된다 (_updateSky)
+    this.sky = new Sky();
+    this.sky.scale.setScalar(1400);
+    const su = this.sky.material.uniforms;
+    su.turbidity.value = 5; su.mieCoefficient.value = 0.004; su.mieDirectionalG.value = 0.85;
+    this.scene.add(this.sky);
+    // 반사·환경광: 같은 하늘 재질로 따로 그린 장면을 PMREM 으로 구워 모든 재질에 비춘다
+    this.envScene = new THREE.Scene();
+    const envSky = new Sky();
+    envSky.material = this.sky.material;
+    envSky.scale.setScalar(1000);
+    this.envScene.add(envSky);
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envBucket = null;
+
+    // 빛 번짐(블룸): 폰·패드에서는 무거워서 PC 만
+    if (!IS_TOUCH) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.5, 0.88));
+      this.composer.addPass(new OutputPass());
+    }
 
     this.level = new Level(this.scene);
     this.bird = new Bird();
@@ -2845,6 +3104,9 @@ class Game {
       onResume: () => this.resume(),
       onRestart: () => { this.sound.init(); this.start(); },
       onPhoto: () => this.savePhoto(),
+      onStage: (i) => this.pickStage(i),
+      onNext: () => { this.stage = Math.min(3, this.stage + 1); this.start(); },
+      onStages: () => this.goMenu(),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
@@ -2858,14 +3120,16 @@ class Game {
     });
     this.ui.setTouchMode(IS_TOUCH);
     this.kb.bindTouch({
-      left: document.getElementById('t-left'), right: document.getElementById('t-right'),
-      flap: document.getElementById('t-flap'), glide: document.getElementById('t-glide'),
+      steer: document.getElementById('t-steer'), act: document.getElementById('t-act'),
+      knob: document.getElementById('t-knob'), pad: document.getElementById('t-pad'),
     });
     this.kb.onTouch = () => this.sound.init();
     this.settings = { ...DEFAULT_SETTINGS, ...loadJSON(SETTINGS_KEY, {}) };
     this.applySettings(this.settings);
     this.ui.setSettings(this.settings);
-    this.best = loadJSON(BEST_KEY, null);
+    this.stage = 0;
+    this.level.showStage(0);
+    this.ui.setStages(0);
     this.tutorial = null;               // 진행 중이면 { i, value, doneT, lastYaw }
     this.ui.setTutorialToggle(this.settings.tutorial);
 
@@ -2946,11 +3210,32 @@ class Game {
     const f = this.perf;
     f.t += raw; f.frames++;
     if (f.t < 2) return;
-    if (f.frames / f.t < 45) this.renderer.setPixelRatio(1);
+    if (f.frames / f.t < 45) { this.renderer.setPixelRatio(1); this.composer?.setPixelRatio(1); }
     f.t = 0; f.frames = 0;
   }
 
+  // 높이 h 에 맞춰 해의 고도·공기 두께를 바꾸고, 반사용 환경광은 40m 마다만 다시 굽는다(비싸서)
+  _updateSky(h) {
+    const t = Math.min(1, h / 560);
+    const elev = THREE.MathUtils.lerp(35, -8, t * t * (3 - 2 * t));
+    _sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - elev), THREE.MathUtils.degToRad(210));
+    const u = this.sky.material.uniforms;
+    u.sunPosition.value.copy(_sunDir);
+    u.rayleigh.value = THREE.MathUtils.lerp(1.4, 0.3, t);   // 높을수록 공기가 옅어 하늘이 짙어진다
+    this.sky.position.copy(this.camera.position);
+    const bucket = Math.round(h / 40);
+    if (bucket !== this.envBucket) {
+      this.envBucket = bucket;
+      const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
+      this.envRT?.dispose();
+      this.envRT = rt;
+      this.scene.environment = rt.texture;
+      this.scene.traverse((o) => { if (o.material?.isMeshStandardMaterial) o.material.envMapIntensity = ENV_INTENSITY; });
+    }
+  }
+
   _resize() {
+    this.composer?.setSize(innerWidth, innerHeight);
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
@@ -2968,34 +3253,53 @@ class Game {
     if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
     if (e.code === 'KeyM') this.applySettings({ ...this.settings, muted: !this.settings.muted });
     if (e.code === 'KeyC') this.savePhoto();
-    // 숫자키 1 = 출발점, 2~4 = 체크포인트 1~3. 도착한 적 있는 곳으로만 바로 이동
+    // 숫자키 1~4 = 그 단계 처음부터
     if (/^Digit[1-4]$/.test(e.code)) {
-      const idx = Number(e.code.slice(5)) - 1;
-      if (!this.level.checkpoints[idx].activated) { this.ui.toast('아직 못 가 본 체크포인트예요', 'warn'); return; }
-      this.cpIndex = idx;
-      this.respawn(idx);
-      this.ui.toast(idx ? `체크포인트 ${idx}(으)로 이동` : '출발점으로 이동');
+      this.stage = Number(e.code.slice(5)) - 1;
+      this.start();
     }
   }
 
   // ── 게임 흐름 ──
+  // 메뉴에서 단계 고르기: 그 단계만 보이고 그 출발점을 비춘다
+  pickStage(i) {
+    this.stage = i;
+    this.level.showStage(i);
+    this.respawn(i);
+    this.ui.setStages(i);
+  }
+
+  // 일시정지 → 스테이지 선택 화면(메인 메뉴). 하던 판은 버린다
+  goMenu() {
+    this.endTutorial(null);
+    this.state = 'menu';
+    this.ui.show('menu');
+    this.pickStage(this.stage);
+  }
+
   start() {
+    const st = this.stage;
+    this.level.showStage(st);
     this.level.resetCheckpoints();
+    for (const cp of this.level.checkpoints) if (cp.index <= st) this.level.activateCheckpoint(cp);
+    // 도착점: 다음 체크포인트, 마지막 단계는 둥지
+    this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
+    this.best = loadJSON(`${BEST_KEY}-${st}`, null);
     this.stats = { time: 0, falls: 0 };
     this.tries = loadJSON(TRIES_KEY, 0) + 1;
     saveJSON(TRIES_KEY, this.tries);
     this.ui.setTries(this.tries);
     this.photo = null;
     this.practice = !CONFIG.STAMINA_ENABLED;   // 연습 모드(무한 체력)로 시작하면 기록 미인정
-    this.cpIndex = 0;
-    this.maxSection = 0;
-    this.respawn(0);
+    this.cpIndex = st;
+    this.maxSection = st;
+    this.respawn(st);
     this.state = 'playing';
     this.ui.show('hud');
-    this.ui.showSection(SECTIONS[0].name, 0);
+    this.ui.showSection(SECTIONS[st].name, st);
     this.clock.getDelta();
     this.endTutorial(null);
-    if (this.settings.tutorial) this.beginTutorial();
+    if (this.settings.tutorial && st === 0) this.beginTutorial();
   }
 
   // ── 튜토리얼 ──
@@ -3117,15 +3421,17 @@ class Game {
 
   clear() {
     this.state = 'clear';
-    const n = this.level.nest.position;
+    const n = this.goal, st = this.stage;
     this.p.pos.set(n.x, n.y + 0.9, n.z);
     this.p.vel.set(0, 0, 0);
     this.clearT = 0;
-    // 최고 기록: 시간이 빠를수록, 같으면 추락이 적을수록
+    if (st < 3) this.level.activateCheckpoint(this.level.checkpoints[st + 1]);
+    this.ui.setStages(st);
+    // 단계별 최고 기록: 시간이 빠를수록
     const rec = { time: this.stats.time, falls: this.stats.falls };
     const isNew = !this.practice && (!this.best || rec.time < this.best.time);
-    if (isNew) { this.best = rec; saveJSON(BEST_KEY, rec); }
-    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice);
+    if (isNew) { this.best = rec; saveJSON(`${BEST_KEY}-${st}`, rec); }
+    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
@@ -3210,7 +3516,7 @@ class Game {
     // 3) 바람 구역
     p.inWind = false;
     for (const z of this.level.windZones) {
-      if (z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
+      if (z.sec.includes(this.stage) && z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
     }
 
     // 4) 활공: 날갯짓을 쉬면 하강 속도를 제한하고 앞으로 미끄러진다. T자 자세면 더 천천히
@@ -3292,6 +3598,7 @@ class Game {
     let ground = null;
     p.grounded = false;
     for (const c of this.level.colliders) {
+      if (!c.sec.includes(this.stage)) continue;   // 다른 단계의 오브젝트는 없는 것으로
       // 대략 판정: 경계 구끼리 멀면 건너뜀
       const dx = p.pos.x - c.center.x, dy = p.pos.y - c.center.y, dz = p.pos.z - c.center.z;
       const rr = c.radius + r;
@@ -3350,27 +3657,10 @@ class Game {
   // ── 체크포인트·둥지·복귀 ──
   checkProgress() {
     const p = this.p;
-    for (const cp of this.level.checkpoints) {
-      const dx = p.pos.x - cp.position.x, dz = p.pos.z - cp.position.z, dy = p.pos.y - cp.position.y;
-      if (!(dx * dx + dz * dz < 7.5 * 7.5 && dy > -1 && dy < 4.5)) continue;
-      // 숫자키로 낮은 체크포인트에 갔다가 다시 지나가도 복귀 지점은 올라간다
-      if (cp.index > this.cpIndex) this.cpIndex = cp.index;
-      if (!cp.activated) {
-        this.level.activateCheckpoint(cp);
-        p.stamina = CONFIG.STAMINA_MAX;
-        this.ui.toast(`체크포인트 ${cp.index} / ${this.level.checkpoints.length - 1}` + (this.practice ? ' · 연습 모드라 기록 미인정' : ''), 'gold');
-        this.photoTitle = `체크포인트 ${cp.index} 도착 · ${SECTIONS[cp.index - 1].name} 통과`;
-        this.sound.checkpoint();
-        this.feathers.emit(_desired.copy(cp.position).add(new THREE.Vector3(0, 2.4, 0)), 36, 0xf4c542, { speed: 7, up: 3, size: 0.26, life: 2.2 });
-      }
-    }
-
-    const n = this.level.nest.position;
-    const ndx = p.pos.x - n.x, ndz = p.pos.z - n.z;
-    if (ndx * ndx + ndz * ndz < (this.level.nest.radius + 0.5) ** 2 && p.pos.y > n.y - 0.5 && p.pos.y < n.y + 4) {
-      this.clear();
-      return;
-    }
+    // 이 단계의 도착점(다음 체크포인트, 마지막 단계는 둥지)에 닿으면 단계 클리어
+    const g = this.goal, gr = this.stage < 3 ? 7.5 : this.level.nest.radius + 0.5;
+    const gx = p.pos.x - g.x, gz = p.pos.z - g.z, gy = p.pos.y - g.y;
+    if (gx * gx + gz * gz < gr * gr && gy > -1 && gy < 4.5) { this.clear(); return; }
 
     // 맨 밑 바닥에 닿으면 마지막 체크포인트(없으면 출발점)로 돌아간다
     if (this.onFloor) {
@@ -3450,11 +3740,11 @@ class Game {
     this.levelTime += dt;
     this.level.update(this.levelTime, dt);
     if (this.state === 'clear') {
-      this.orbitCamera(this.level.nest.position, 13, 5, 1, dt);
+      this.orbitCamera(this.goal, 13, 5, 1, dt);
     } else {
       this.acc += dt;
       while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
-      this.orbitCamera(this.level.checkpoints[0].position, 16, 6, 6, dt);
+      this.orbitCamera(this.level.checkpoints[this.stage].position, 16, 6, 6, dt);
     }
   }
 
@@ -3505,7 +3795,7 @@ class Game {
       const prev = this.clearT;
       this.clearT += dt;
       // 카메라가 둥지를 돌며 독수리를 비출 때쯤 클리어 기념사진
-      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = '클리어! 둥지 도착';
+      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
       if (this.clearT < 4.5 && Math.floor(prev / 0.7) !== Math.floor(this.clearT / 0.7)) {
         this.bird.triggerFlap(1);
         this.feathers.emit(p.pos, 8, 0xf4c542, { speed: 4, up: 3, size: 0.22 });
@@ -3541,6 +3831,13 @@ class Game {
 
     // 하늘·조명
     this.level.updateAtmosphere(p.pos.y, { scene: this.scene, sun: this.sun, hemi: this.hemi, stars: this.stars });
+    // 실사 조명: 하늘 환경광(scene.environment)이 주변광을 맡으니 반구광은 약하게, 햇빛은 세게 → 그림자 대비.
+    // 안개는 멀리 밀어 공기 원근감만 남긴다
+    this.hemi.intensity *= 0.35;
+    this.sun.intensity *= 1.6;
+    this.scene.fog.near *= 2.5;
+    this.scene.fog.far *= 2;
+    this._updateSky(p.pos.y);
     this.stars.position.copy(this.camera.position);
     this.sun.position.copy(p.pos).add(this.sunOffset);
     this.sun.target.position.copy(p.pos);
@@ -3555,7 +3852,7 @@ class Game {
       });
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     // 기념사진은 방금 그린 화면으로 만든다 (다음 프레임이 되면 캔버스 내용이 사라짐)
     if (this.photoTitle) { this._makePhoto(this.photoTitle); this.photoTitle = null; }
   }
@@ -3603,6 +3900,9 @@ class Game {
     }, 'image/png');
   }
 }
+
+// 아이폰 사파리는 user-scalable=no 를 무시하므로 두 손가락 확대·두 번 톡 확대를 직접 막는다
+for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
 
 // 코스 모델을 먼저 풀어놓고 게임을 만든다 (Level 이 생성자에서 바로 모델을 쓰므로)
 loadAssets().then(() => {
