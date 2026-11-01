@@ -1382,7 +1382,8 @@ class Level {
     const center = mid.clone();
     if (updraft) center.y += 6;
     const box = new THREE.Box3().setFromCenterAndSize(center, size);
-    const strength = updraft ? 19 : lerp(5, 12, d);
+    // 옆바람은 예전(5~12)의 절반. 상승 기류는 중력(11)보다 세야 띄워 주므로 그대로
+    const strength = updraft ? 19 : lerp(5, 12, d) * 0.5;
     const force = updraft ? new THREE.Vector3(0, strength, 0)
       : normal.clone().multiplyScalar((this.rng() < 0.5 ? -1 : 1) * strength);
 
@@ -3528,7 +3529,8 @@ class Game {
     // 3) 바람 구역
     p.inWind = false;
     for (const z of this.level.windZones) {
-      if (z.sec.includes(this.stage) && z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
+      // 발판에 앉아 있는 동안은 바람을 안 맞는다 (쉬다가 밀려 떨어지지 않게)
+      if (!p.grounded && z.sec.includes(this.stage) && z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
     }
 
     // 4) 활공: 날갯짓을 쉬면 하강 속도를 제한하고 앞으로 미끄러진다. T자 자세면 더 천천히
