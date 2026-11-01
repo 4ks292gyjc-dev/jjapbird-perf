@@ -218,6 +218,10 @@
   #photo-card img, .clear-photo { width: 100%; border-radius: 10px; display: block; }
   .clear-photo { margin: 0 0 16px; }
   .clear-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .clear-stars { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 18px; }
+  .clear-stars span { padding: 4px 10px; border-radius: 999px; background: #e9eef5; color: var(--ink-soft); font-family: var(--display); }
+  .clear-stars span.on { background: var(--gold); color: var(--ink); }
+  .stage-pick .earned { color: var(--gold-deep); font-size: .95em; letter-spacing: 1px; }
   @media (max-width: 500px) { .clear-btns .btn { flex: 1 1 100%; } }   /* 좁은 폰: 한 줄에 하나씩 꽉 차게 */
   .new-record { margin: -12px 0 20px; font-family: var(--display); font-size: 1.3rem; color: var(--gold-deep); }
 
@@ -276,6 +280,12 @@
     #t-act .t-hint { bottom: calc(max(28px, env(safe-area-inset-bottom, 0px)) + 118px); }
   }
   /* 패드(태블릿): 손이 커지는 게 아니라 화면이 커지니, 조작 판을 키우고 엄지 높이로 조금 올린다 */
+  /* 폭 400px 이하 폰: 버튼 옆 기록 다섯 칸이 겹치지 않게 */
+  @media (pointer: coarse) and (max-width: 400px) {
+    body.touch .stats { gap: 7px; }
+    body.touch .stats div b { font-size: .98rem; }
+    body.touch .hud-btns .chip { padding: .4em .7em; }
+  }
   @media (pointer: coarse) and (min-width: 768px) and (min-height: 600px) {
     .t-pad { width: 250px; height: 96px; border-radius: 48px; left: max(52px, env(safe-area-inset-left, 0px)); bottom: max(56px, env(safe-area-inset-bottom, 0px)); }
     .t-knob { width: 80px; height: 80px; margin: -40px 0 0 -40px; }
@@ -345,10 +355,10 @@
     <h1 class="title" id="game-title"><span class="t1">짭새의</span><span class="t2">모험</span></h1>
     <p class="tagline">전설의 짭새는 불미스러운 사고로 인하여 서부경찰서에서 쫓겨나 밑바닥 인생으로 떨어지고 말았다.... 국세횡령왕의 타이틀을 빼앗기 위한 방법은 단 하나, 꼭대기로 올라가기뿐이다!!!</p>
     <div class="stage-pick" role="group" aria-label="단계 선택">
-      <button class="chip" data-stage="0">1단계 · 도시 폐허<span class="diff d0">★☆☆☆ 쉬움</span></button>
-      <button class="chip" data-stage="1">2단계 · 공사장<span class="diff d1">★★☆☆ 보통</span></button>
-      <button class="chip" data-stage="2">3단계 · 공중 정원<span class="diff d2">★★★☆ 어려움</span></button>
-      <button class="chip" data-stage="3">4단계 · 성층권<span class="diff d3">★★★★ 매우 어려움</span></button>
+      <button class="chip" data-stage="0">1단계 · 도시 폐허<span class="diff d0">★☆☆☆ 쉬움</span><span class="earned" id="earned-0">☆☆☆</span></button>
+      <button class="chip" data-stage="1">2단계 · 공사장<span class="diff d1">★★☆☆ 보통</span><span class="earned" id="earned-1">☆☆☆</span></button>
+      <button class="chip" data-stage="2">3단계 · 공중 정원<span class="diff d2">★★★☆ 어려움</span><span class="earned" id="earned-2">☆☆☆</span></button>
+      <button class="chip" data-stage="3">4단계 · 성층권<span class="diff d3">★★★★ 매우 어려움</span><span class="earned" id="earned-3">☆☆☆</span></button>
     </div>
     <div class="menu-row">
       <button class="btn" id="btn-start-cam">카메라로 시작</button>
@@ -401,6 +411,7 @@
     <div><span>단계</span><b id="stat-section">1단계</b></div>
     <div><span>시간</span><b id="stat-time">0:00</b></div>
     <div><span>추락</span><b id="stat-falls">0</b></div>
+    <div><span>봉투</span><b id="stat-coins">0/3</b></div>
     <div><span>시도</span><b id="stat-try">1</b></div>
   </div>
 
@@ -518,8 +529,10 @@
       <dt>걸린 시간</dt><dd id="clear-time">0분 00초</dd>
       <dt>추락</dt><dd id="clear-falls">0번</dd>
       <dt>시도</dt><dd id="clear-try">1번째</dd>
+      <dt>세금 봉투</dt><dd id="clear-coins">0 / 3</dd>
       <dt>최고 기록</dt><dd id="clear-best" class="best">-</dd>
     </dl>
+    <p id="clear-stars" class="clear-stars" aria-label="별 평가"></p>
     <p id="clear-new" class="new-record" hidden>새 최고 기록!</p>
     <img id="clear-photo" class="clear-photo" alt="클리어 기념사진">
     <div class="clear-btns">
@@ -788,6 +801,7 @@ class Level {
     this.checkpoints = [];      // [0] = 시작 지점, [1..3] = 구간 끝
     this.nest = null;
     this.pathPoints = [];
+    this.platforms = [];        // 일반 발판 { pos, yaw, sec } — 중간 깃발·봉투 자리 고르는 데 사용
 
     // 빌드 컨텍스트: 충돌체 생성 여부, 움직이는 오브젝트 여부, 그림자
     this.ctx = { collide: true, dynamic: false, shadow: true };
@@ -800,6 +814,7 @@ class Level {
     this.root.add = (...objs) => { for (const o of objs) o.userData.sec ??= this.buildSecs ?? [this.buildSec]; return add(...objs); };
 
     this._build();
+    this._buildExtras();
 
     this.root.updateMatrixWorld(true);
     for (const c of this.colliders) this._refreshCollider(c, true);
@@ -843,6 +858,49 @@ class Level {
       merged.userData.sec = key.split('|')[3].split(',').map(Number);
       this.root.add(merged);
     }
+  }
+
+  // 단계마다 중간 깃발 1개와 세금 봉투 3개. 난수를 쓰지 않아 코스 배치는 그대로다
+  _buildExtras() {
+    this.mids = [];
+    this.envelopes = [];
+    for (let si = 0; si < SECTIONS.length; si++) {
+      const plats = this.platforms.filter((q) => q.sec === si);
+      if (plats.length < 2) continue;
+      this.buildSec = si;
+      // 중간 깃발: 단계 가운데쯤 발판, 독수리가 서는 가운데를 피해 옆에 세운다
+      const m = plats[Math.floor(plats.length / 2)];
+      const g = new THREE.Group();
+      g.position.copy(m.pos);
+      g.rotation.y = m.yaw;
+      this.root.add(g);
+      this.mesh(g, G.cyl6, 0xdde3ea, 2.2, 1.6, 0, 0.12, 3.2, 0.12);
+      this.mesh(g, G.box, 0xf4c542, 2.8, 2.8, 0, 1.1, 0.7, 0.05, null, 0x8a6a00);
+      this.mids.push({ sec: si, position: m.pos.clone(), yaw: m.yaw });
+      // 봉투: 단계를 4등분한 세 지점의 발판 사이, 길에서 옆으로 4m·위로 4m (살짝 돌아가야 먹는 자리)
+      for (let k = 1; k <= 3; k++) {
+        const i = Math.min(plats.length - 2, Math.floor((plats.length - 1) * k / 4));
+        const a = plats[i].pos, b = plats[i + 1].pos;
+        const dir = b.clone().sub(a); dir.y = 0; dir.normalize();
+        const pos = a.clone().lerp(b, 0.5).addScaledVector(new THREE.Vector3(-dir.z, 0, dir.x), k % 2 ? 4 : -4);
+        pos.y += 4;
+        const e = new THREE.Group();
+        e.position.copy(pos);
+        this.root.add(e);
+        this.ctx.dynamic = true;   // 빙글빙글 돌아서 합치지 않는다
+        this.mesh(e, G.box, 0xf1e6cc, 0, 0, 0, 1.1, 0.7, 0.06);
+        this.mesh(e, G.box, 0xc23b3b, 0, 0, 0.045, 0.22, 0.22, 0.04, null, 0x400000);   // 빨간 봉인
+        this.ctx.dynamic = false;
+        this.envelopes.push({ sec: si, pos, obj: e, k, got: false });
+      }
+    }
+    this.animators.push((t) => {
+      for (const e of this.envelopes) { e.obj.rotation.y = t * 2 + e.k; e.obj.position.y = e.pos.y + Math.sin(t * 2.5 + e.k) * 0.25; }
+    });
+  }
+
+  resetEnvelopes() {
+    for (const e of this.envelopes) { e.got = false; for (const c of e.obj.children) c.visible = true; }
   }
 
   // 한 단계만 보이게
@@ -1026,6 +1084,7 @@ class Level {
 
   // ── 일반 발판 ──
   _buildPlatform(pos, yaw, sec) {
+    this.platforms.push({ pos: pos.clone(), yaw, sec: this.buildSec });
     const g = new THREE.Group();
     g.position.copy(pos);
     g.rotation.y = yaw;
@@ -2229,14 +2288,20 @@ class UI {
   }
 
   setTries(n) { this.el.tries.textContent = n; }
+  setCoins(n) { $('stat-coins').textContent = `${n}/3`; }
+  // 단계 버튼에 그 단계에서 얻은 최고 별 수
+  setEarned(i, n) { $(`earned-${i}`).textContent = '★'.repeat(n) + '☆'.repeat(3 - n); }
 
   // 단계 버튼: 고른 단계를 강조
   setStages(current) {
     for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(Number(b.dataset.stage) === current));
   }
 
-  showClear({ time, falls }, best, isNew, tries, practice, stage) {
-    $('clear-title').textContent = stage < 3 ? `${stage + 1}단계 클리어!` : '둥지에 도착했어요';
+  showClear({ time, falls, coins }, best, isNew, tries, practice, stage, stars) {
+    $('clear-coins').textContent = `${coins} / 3`;
+    $('clear-stars').innerHTML = ['클리어', '봉투 3개', '추락 0번'].map((label, i) =>
+      `<span class="${stars[i] ? 'on' : ''}">${stars[i] ? '★' : '☆'} ${label}</span>`).join('');
+    $('clear-title').textContent = stage < 3 ? `${stage + 1}단계 클리어!` : '국세횡령왕 타이틀 획득!';
     $('btn-next').hidden = stage >= 3;
     const fmt = fmtTime;
     $('photo-card').hidden = true;
@@ -2353,6 +2418,13 @@ class Sound {
   }
 
   // 체크포인트: 올라가는 3음 차임
+  coin() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this._tone(t, 1568, 0.22, { gain: 0.14 });
+    this._tone(t + 0.08, 2093, 0.3, { gain: 0.12 });
+  }
+
   checkpoint() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -2851,6 +2923,7 @@ if (IS_TOUCH) {
 // 설정 저장 (감도·볼륨). 저장소를 못 쓰는 환경이면 기본값으로
 const SETTINGS_KEY = 'jjapsae-settings';
 const BEST_KEY = 'jjapsae-best';     // 단계별: jjapsae-best-0 ~ 3
+const STARS_KEY = 'jjapsae-stars';   // 단계별 최고 별 수: jjapsae-stars-0 ~ 3
 const TRIES_KEY = 'jjapsae-tries';   // 지금까지 게임을 시작한 횟수
 const DEFAULT_SETTINGS = { flap: 1, tilt: 1, volume: 0.7, muted: false, stamina: true, tutorial: true };
 
@@ -2933,6 +3006,46 @@ function saveJSON(key, value) {
 const STEP = 1 / 120;        // 물리 고정 스텝 (빠른 속도에서도 장애물을 뚫지 않게)
 const UP = new THREE.Vector3(0, 1, 0);
 const _sunDir = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const _crownOff = new THREE.Vector3(0, 1.12, 0);   // 독수리 원점에서 모자 위까지
+const _rainFog = new THREE.Color(0x7d8590);
+
+// 단계별 날씨: 0 도시 폐허 먼지 · 1 공사장 비 · 2 공중 정원 꽃잎 · 3 성층권 얼음 결정
+// vel = 초당 이동(m), sway = 좌우로 흔들리는 세기
+const WEATHER = [
+  { kind: 'pts', color: 0xd9cbb0, size: 0.25, vel: [0.8, -0.15, 0.4], sway: 0.3, opacity: 0.6 },
+  { kind: 'rain', color: 0xe8eef5, vel: [-2, -26, 1], opacity: 0.6 },
+  { kind: 'pts', color: 0xf7a1bd, size: 0.6, vel: [0.6, -1.2, 0.3], sway: 1.2, opacity: 0.95 },
+  { kind: 'pts', color: 0xd8ecff, size: 0.22, vel: [0.1, -0.25, 0.05], sway: 0.2, opacity: 0.95 },
+];
+
+// 부드러운 동그라미 점 (먼지·꽃잎·얼음 결정 입자용)
+let _dotTex = null;
+function dotTexture() {
+  if (_dotTex) return _dotTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+  _dotTex = new THREE.CanvasTexture(c);
+  return _dotTex;
+}
+
+// 금관: 테 + 뾰족 장식 5개
+function makeCrown() {
+  const gold = new THREE.MeshStandardMaterial({ color: 0xffcf3a, emissive: 0x6a4800, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide });
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.14, 12, 1, true), gold));
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.17, 5), gold);
+    s.position.set(Math.cos(a) * 0.2, 0.15, Math.sin(a) * 0.2);
+    g.add(s);
+  }
+  return g;
+}
 const ENV_INTENSITY = 0.3;   // 하늘 환경광 세기: 1 이면 물리 하늘이 너무 밝아 장면이 하얗게 뜬다
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -3069,6 +3182,7 @@ class Game {
 
     this.stars = this._makeStars();
     this.scene.add(this.stars);
+    this.weather = this._makeWeather();
 
     // 물리 기반 하늘(대기 산란). 높이 오를수록 해가 져서 노을 → 밤 → 우주가 된다 (_updateSky)
     this.sky = new Sky();
@@ -3143,6 +3257,8 @@ class Game {
     this.stage = 0;
     this.level.showStage(0);
     this.ui.setStages(0);
+    for (let i = 0; i < 4; i++) this.ui.setEarned(i, loadJSON(`${STARS_KEY}-${i}`, 0));
+    this._loadRival().catch((e) => console.warn('라이벌 모델을 못 불러왔어요', e));
     this.tutorial = null;               // 진행 중이면 { i, value, doneT, lastYaw }
     this.ui.setTutorialToggle(this.settings.tutorial);
 
@@ -3169,7 +3285,7 @@ class Game {
     this.simTime = 0;
     this.levelTime = 0;
     this.acc = 0;
-    this.stats = { time: 0, falls: 0 };
+    this.stats = { time: 0, falls: 0, coins: 0 };
     this.cpIndex = 0;
     this.maxSection = 0;
     this.camYaw = 0;
@@ -3201,6 +3317,50 @@ class Game {
     this.sound.setMuted(s.muted);
     this.ui.setMuted(s.muted);
     saveJSON(SETTINGS_KEY, s);
+  }
+
+  // ── 단계별 날씨 입자 ──
+  // 카메라 주변 상자(±W) 안에서 월드 좌표로 움직이고, 상자를 벗어나면 반대편으로 돌아온다
+  _makeWeather() {
+    const W = 16, N = IS_TOUCH ? 700 : 1500;   // 카메라 가까이 촘촘하게
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < pos.length; i++) pos[i] = (Math.random() * 2 - 1) * W;
+    const rainGeo = new THREE.BufferGeometry();
+    rainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 6), 3));
+    const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ transparent: true, depthWrite: false }));
+    const ptsGeo = new THREE.BufferGeometry();
+    ptsGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    const pts = new THREE.Points(ptsGeo, new THREE.PointsMaterial({ map: dotTexture(), transparent: true, depthWrite: false }));
+    rain.frustumCulled = pts.frustumCulled = false;
+    this.scene.add(rain, pts);
+    return { W, pos, rain, pts, cfg: null };
+  }
+
+  _updateWeather(dt) {
+    const w = this.weather, cfg = WEATHER[this.stage], c = this.camera.position;
+    if (w.cfg !== cfg) {   // 단계가 바뀌면 재질만 갈아 끼운다
+      w.cfg = cfg;
+      const rain = cfg.kind === 'rain';
+      w.rain.visible = rain; w.pts.visible = !rain;
+      const m = rain ? w.rain.material : w.pts.material;
+      m.color.setHex(cfg.color); m.opacity = cfg.opacity;
+      if (!rain) m.size = cfg.size;
+      m.needsUpdate = true;
+    }
+    const p = w.pos, W = w.W, t = this.levelTime, [vx, vy, vz] = cfg.vel;
+    const out = (cfg.kind === 'rain' ? w.rain : w.pts).geometry.attributes.position;
+    for (let i = 0, j = 0; i < p.length; i += 3, j++) {
+      const sway = cfg.sway ? Math.sin(t * 1.7 + j) * cfg.sway : 0;
+      p[i] += (vx + sway) * dt; p[i + 1] += vy * dt; p[i + 2] += (vz + sway * 0.5) * dt;
+      for (let a = 0; a < 3; a++) {
+        const d = p[i + a] - c.getComponent(a);
+        if (d < -W) p[i + a] += 2 * W; else if (d > W) p[i + a] -= 2 * W;
+      }
+      if (cfg.kind === 'rain') {   // 빗줄기: 떨어지는 방향 반대로 1.6m 꼬리
+        out.array.set([p[i], p[i + 1], p[i + 2], p[i] - vx * 0.06, p[i + 1] - vy * 0.06, p[i + 2] - vz * 0.06], j * 6);
+      } else out.array.set([p[i], p[i + 1], p[i + 2]], i);
+    }
+    out.needsUpdate = true;
   }
 
   _makeStars() {
@@ -3235,6 +3395,10 @@ class Game {
     const u = this.sky.material.uniforms;
     u.sunPosition.value.copy(_sunDir);
     u.rayleigh.value = THREE.MathUtils.lerp(1.4, 0.3, t);   // 높을수록 공기가 옅어 하늘이 짙어진다
+    const rainy = this.stage === 1;   // 비 오는 단계는 탁하고 어두운 하늘
+    u.turbidity.value = rainy ? 12 : 5;
+    u.mieCoefficient.value = rainy ? 0.02 : 0.004;
+    this.renderer.toneMappingExposure = rainy ? 0.4 : 0.5;
     this.sky.position.copy(this.camera.position);
     const bucket = Math.round(h / 40);
     if (bucket !== this.envBucket) {
@@ -3298,7 +3462,11 @@ class Game {
     // 도착점: 다음 체크포인트, 마지막 단계는 둥지
     this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
     this.best = loadJSON(`${BEST_KEY}-${st}`, null);
-    this.stats = { time: 0, falls: 0 };
+    this.mid = null;                 // 이번 판에 닿은 중간 깃발
+    this.level.resetEnvelopes();
+    this.ui.setCoins(0);
+    this._resetRival();
+    this.stats = { time: 0, falls: 0, coins: 0 };
     this.tries = loadJSON(TRIES_KEY, 0) + 1;
     saveJSON(TRIES_KEY, this.tries);
     this.ui.setTries(this.tries);
@@ -3313,6 +3481,7 @@ class Game {
     this.clock.getDelta();
     this.endTutorial(null);
     if (this.settings.tutorial && st === 0) this.beginTutorial();
+    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.toast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크', 'warn'), 2600);
   }
 
   // ── 튜토리얼 ──
@@ -3387,7 +3556,7 @@ class Game {
     this.applySettings({ ...this.settings, tutorial: false });
     this.ui.setTutorialToggle(false);
     // 튜토리얼 동안의 시간·추락은 기록에 넣지 않는다
-    this.stats = { time: 0, falls: 0 };
+    this.stats = { time: 0, falls: 0, coins: 0 };
     this.ui.toast(skipped ? '튜토리얼을 건너뛰었어요' : '출발! 기록 측정을 시작해요', 'gold');
   }
 
@@ -3444,13 +3613,19 @@ class Game {
     const rec = { time: this.stats.time, falls: this.stats.falls };
     const isNew = !this.practice && (!this.best || rec.time < this.best.time);
     if (isNew) { this.best = rec; saveJSON(`${BEST_KEY}-${st}`, rec); }
-    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st);
+    // 별 평가: 클리어 / 봉투 3개 / 추락 0번. 연습 모드면 저장 안 함
+    const stars = [true, this.stats.coins >= 3, this.stats.falls === 0];
+    const starCount = stars.filter(Boolean).length;
+    if (!this.practice && starCount > loadJSON(`${STARS_KEY}-${st}`, 0)) saveJSON(`${STARS_KEY}-${st}`, starCount);
+    this.ui.setEarned(st, loadJSON(`${STARS_KEY}-${st}`, 0));
+    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st, stars);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
 
   respawn(idx) {
-    const cp = this.level.checkpoints[idx];
+    // 이번 단계에서 중간 깃발에 닿았으면 거기서 다시 시작
+    const cp = this.mid && idx === this.stage ? this.mid : this.level.checkpoints[idx];
     const p = this.p;
     p.pos.copy(cp.position).add(new THREE.Vector3(0, 1.6, 0));
     p.vel.set(0, 0, 0);
@@ -3466,6 +3641,60 @@ class Game {
     _off.set(0, CONFIG.CAM_HEIGHT, CONFIG.CAM_DISTANCE).applyAxisAngle(UP, this.camYaw);
     this.camera.position.copy(p.pos).add(_off);
     this.camLook.copy(p.pos);
+  }
+
+  // ── 국세횡령왕: 4단계 둥지에서 왕관을 쓰고 기다리는 라이벌 독수리 ──
+  async _loadRival() {
+    const model = (await new GLTFLoader().loadAsync('eagle.glb')).scene;
+    model.traverse((m) => {
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.frustumCulled = false;
+      m.material = m.material.clone();
+      m.material.color.setRGB(0.55, 0.42, 0.42);   // 어둡고 붉은 악당 톤
+    });
+    const n = this.level.nest.position;
+    const g = new THREE.Group();
+    g.add(model);
+    g.position.set(n.x + 2.4, n.y + 0.9, n.z);
+    g.rotation.y = Math.PI / 2;                       // 둥지 가운데(도착하는 플레이어)를 바라본다
+    g.userData.sec = [3];
+    this.level.root.add(g);
+    const crown = makeCrown();
+    crown.userData.sec = [3];
+    this.level.root.add(crown);
+    this.rival = { g, crown, home: g.position.clone() };
+    this._resetRival();
+    this.level.showStage(this.stage);
+  }
+
+  _resetRival() {
+    const r = this.rival;
+    if (!r) return;
+    r.g.position.copy(r.home);
+    r.g.rotation.set(0, Math.PI / 2, 0);
+    r.g.scale.setScalar(1);
+    r.crown.position.copy(r.home).add(_crownOff);
+    r.crown.rotation.set(0, 0, 0);
+  }
+
+  // 클리어 뒤 t초: 0.4~1.6초 왕관이 포물선을 그리며 내 머리로, 라이벌은 겁먹고 날아가 사라진다
+  _rivalScene(prev, t) {
+    const r = this.rival;
+    if (!r) return;
+    const k = clamp((t - 0.4) / 1.2, 0, 1);
+    _a.copy(r.home).add(_crownOff);
+    _b.copy(this.p.pos).add(_crownOff);
+    r.crown.position.lerpVectors(_a, _b, k * k * (3 - 2 * k));
+    r.crown.position.y += Math.sin(k * Math.PI) * 2.5;
+    r.crown.rotation.y = t * (k < 1 ? 9 : 1.5);
+    if (t > 0.9) {
+      const f = t - 0.9;
+      r.g.position.copy(r.home).add(_a.set(f * f * 6, f * f * 5, f * 3));
+      r.g.rotation.z = -f * 1.5;
+      r.g.scale.setScalar(Math.max(0.01, 1 - f / 3));
+    }
+    if (prev < 1.6 && t >= 1.6) this.ui.toast('국세횡령왕의 타이틀을 빼앗았다!', 'gold');
   }
 
   // ── 날갯짓 1회: 위 + 앞으로 힘 ──
@@ -3671,6 +3900,30 @@ class Game {
   // ── 체크포인트·둥지·복귀 ──
   checkProgress() {
     const p = this.p;
+    // 중간 깃발 발판에 내려앉으면, 그 뒤로는 떨어져도 여기서 다시 시작
+    const m = this.level.mids.find((q) => q.sec === this.stage);
+    if (m && !this.mid && p.grounded) {
+      const mx = p.pos.x - m.position.x, mz = p.pos.z - m.position.z;
+      if (mx * mx + mz * mz < 49 && Math.abs(p.pos.y - m.position.y) < 4) {
+        this.mid = m;
+        p.stamina = CONFIG.STAMINA_MAX;
+        this.ui.toast('중간 지점! 떨어지면 여기서 다시 시작해요', 'gold');
+        this.sound.checkpoint();
+        this.feathers.emit(p.pos, 20, 0xf4c542, { speed: 5, up: 3, size: 0.22 });
+      }
+    }
+    // 세금 봉투
+    for (const e of this.level.envelopes) {
+      if (e.sec !== this.stage || e.got || p.pos.distanceTo(e.obj.position) > 2) continue;
+      e.got = true;
+      for (const c of e.obj.children) c.visible = false;
+      this.stats.coins++;
+      this.ui.setCoins(this.stats.coins);
+      this.ui.toast(`압수된 세금 봉투 ${this.stats.coins} / 3`, 'gold');
+      this.sound.coin();
+      this.feathers.emit(e.obj.position, 16, 0xf1e6cc, { speed: 5, up: 2, size: 0.24 });
+    }
+
     // 이 단계의 도착점(다음 체크포인트, 마지막 단계는 둥지)에 닿으면 단계 클리어
     const g = this.goal, gr = this.stage < 3 ? 7.5 : this.level.nest.radius + 0.5;
     const gx = p.pos.x - g.x, gz = p.pos.z - g.z, gy = p.pos.y - g.y;
@@ -3688,7 +3941,7 @@ class Game {
       return;
     }
 
-    const floor = this.level.checkpoints[this.cpIndex].position.y - CONFIG.FALL_RESET_DEPTH;
+    const floor = (this.mid ?? this.level.checkpoints[this.cpIndex]).position.y - CONFIG.FALL_RESET_DEPTH;
     if (p.pos.y < floor || p.pos.y < -40) {
       if (!p.fallCounted) this.stats.falls++;
       const peak = p.airPeak;
@@ -3812,6 +4065,7 @@ class Game {
       this.clearT += dt;
       // 카메라가 둥지를 돌며 독수리를 비출 때쯤 클리어 기념사진
       if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
+      if (this.stage === 3) this._rivalScene(prev, this.clearT);
       if (this.clearT < 4.5 && Math.floor(prev / 0.7) !== Math.floor(this.clearT / 0.7)) {
         this.bird.triggerFlap(1);
         this.feathers.emit(p.pos, 8, 0xf4c542, { speed: 4, up: 3, size: 0.22 });
@@ -3853,8 +4107,15 @@ class Game {
     this.sun.intensity *= 1.6;
     this.scene.fog.near *= 2.5;
     this.scene.fog.far *= 2;
+    if (this.stage === 1) {   // 비 오는 공사장: 흐리고 어둡게, 안개는 가깝게
+      this.scene.fog.color.lerp(_rainFog, 0.6);
+      this.scene.fog.near *= 0.5;
+      this.scene.fog.far *= 0.6;
+      this.sun.intensity *= 0.45;
+    }
     this._updateSky(p.pos.y);
     this.stars.position.copy(this.camera.position);
+    if (live) this._updateWeather(dt);
     this.sun.position.copy(p.pos).add(this.sunOffset);
     this.sun.target.position.copy(p.pos);
 
@@ -3888,7 +4149,7 @@ class Game {
     x.fillStyle = '#fff';
     x.font = `56px ${font}`; x.fillText(title, 48, H - 118);
     x.font = `32px ${font}`;
-    x.fillText(`타이머 ${fmtTime(this.stats.time)}  ·  ${this.tries}번째 시도  ·  추락 ${this.stats.falls}번  ·  고도 ${Math.round(this.p.pos.y)}m`, 48, H - 62);
+    x.fillText(`타이머 ${fmtTime(this.stats.time)}  ·  ${this.tries}번째 시도  ·  추락 ${this.stats.falls}번  ·  봉투 ${this.stats.coins}/3  ·  고도 ${Math.round(this.p.pos.y)}m`, 48, H - 62);
     const now = new Date();
     x.font = `26px ${font}`; x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.9)';
     x.fillText(`짭새의 모험 · ${now.toLocaleDateString('ko-KR')}`, W - 40, 52);
