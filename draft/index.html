@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>짭새의 모험 (초안)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +35,9 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd4f5; color: var(--ink); font-family: var(--body); }
   canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   [hidden] { display: none !important; }
+  /* 폰·패드: 두 번 톡 확대, 길게 눌러 글자 선택·복사 메뉴가 뜨지 않게 (게임 화면이라 선택할 글이 없다) */
+  html, body { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
   button { font: inherit; cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 
@@ -591,6 +594,7 @@ const G = {
   octa: new THREE.OctahedronGeometry(1, 0),
 };
 
+const CLOUD_GEO = new THREE.IcosahedronGeometry(1, 3);
 const matCache = new Map();
 function mat(color, emissive = 0, emissiveIntensity = 1) {
   const key = `${color}-${emissive}-${emissiveIntensity}`;
@@ -605,6 +609,62 @@ function mat(color, emissive = 0, emissiveIntensity = 1) {
 
 // 합쳐진 정적 코스 메시용: mat() 과 같은 질감, 색은 정점마다
 const VERTEX_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0.05 });
+VERTEX_MAT.userData.atlas = { value: null };
+VERTEX_MAT.onBeforeCompile = (sh) => {
+  sh.uniforms.uAtlas = VERTEX_MAT.userData.atlas;
+  sh.uniforms.uInvSize = { value: SURF_SIZE.map((m) => 1 / m) };
+  sh.uniforms.uAvg = { value: SURF_AVG.map(([r, g, b]) => { const c = new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace); return new THREE.Vector3(c.r, c.g, c.b); }) };
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float surf;\nflat varying float vSurf;\nvarying vec3 vWPos;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurf = surf;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+uniform sampler2D uAtlas; uniform float uInvSize[16]; uniform vec3 uAvg[16];
+flat varying float vSurf; varying vec3 vWPos;
+// 아틀라스 한 칸(id)에서 반복 무늬 읽기. 칸 경계 번짐을 막으려 안쪽 98% 만 쓰고, 밉맵은 반복 전 좌표의 기울기로 고른다
+vec3 atlasTap(int id, vec2 uv) {
+  vec2 cell = vec2(float(id % 4), float(3 - id / 4));
+  vec2 a = (cell + 0.01 + fract(uv) * 0.98) * 0.25;
+  return textureGrad(uAtlas, a, dFdx(uv) * 0.245, dFdy(uv) * 0.245).rgb;
+}`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+if (vSurf > -0.5) {
+  int s = int(vSurf + 0.5);
+  bool keepColor = s >= 16;
+  int id = keepColor ? s - 16 : s;
+  vec3 n = abs(normalize(cross(dFdx(vWPos), dFdy(vWPos))));
+  vec3 w = pow(n, vec3(4.0)); w /= w.x + w.y + w.z;
+  vec3 p = vWPos * uInvSize[id];
+  vec3 t = atlasTap(id, p.zy) * w.x + atlasTap(id, p.xz) * w.y + atlasTap(id, p.xy) * w.z;
+  diffuseColor.rgb = keepColor ? diffuseColor.rgb * t / uAvg[id] : t;
+}`);
+};
+
+// ── 실사 재질 ──
+// 실제 사진 재질 16장(Poly Haven CC0)을 4×4 로 묶은 textures.jpg (tools/atlas.py).
+// 모델에 UV 가 없어서 세 방향에서 투영(triplanar)해 입힌다. 합쳐진 정적 메시(VERTEX_MAT)에만 적용.
+// surf 값: -1 = 사진 없음, 0..15 = 사진 그대로, 16..31 = 사진 무늬만 쓰고 원래 색 유지(D)
+const D = (n) => n + 16;
+//                 회반죽 콘크리트 함석 녹슨철 무늬철판 판자 벽돌 기와 아스팔트 잔디 절벽 나무껍질 낙엽 벽돌바닥 이끼바위 블록
+const SURF_SIZE = [3,     3,      2.5, 2,     1.5,    2,   2,   2.5, 5,      4,   6,   1.5,    3,   3,     5,     3];   // 사진 한 장이 덮는 미터
+const SURF_AVG = [[0.67, 0.639, 0.626], [0.446, 0.414, 0.353], [0.666, 0.701, 0.684], [0.636, 0.384, 0.178], [0.241, 0.196, 0.11], [0.42, 0.391, 0.351], [0.557, 0.403, 0.315], [0.35, 0.201, 0.109], [0.355, 0.352, 0.332], [0.592, 0.515, 0.35], [0.486, 0.324, 0.194], [0.372, 0.337, 0.25], [0.557, 0.44, 0.229], [0.392, 0.34, 0.273], [0.431, 0.363, 0.205], [0.271, 0.241, 0.197]];   // 칸별 평균색(sRGB), atlas.py 출력
+// 모델 재질 이름 → surf. 에셋별 표가 먼저, 없으면 재질 이름 표
+const SURF_BY_ASSET = {
+  house_body: { tint: 6, tintdark: D(15), tintlight: D(1) }, house_roof: { tint: D(7), tintdark: D(7) },
+  rock: { tint: 10, tintdark: 10, tintlight: 10 }, asteroid: { tint: D(10), tintdark: D(10), tintlight: D(10) },
+  container: { tint: D(2), tintdark: D(2) }, railcar: { tint: D(2), tintdark: D(2) }, mover: { tint: D(4), tintdark: D(4) },
+  tree: { tint: D(12), tintdark: D(12), tintlight: D(12) }, foliage: { tint: D(12), tintdark: D(12), tintlight: D(12) },
+  island: { tint: 9, tintdark: 9 }, boat: { tint: D(5), tintdark: D(5) },
+  pipe: { tint: D(3), tintdark: D(4) }, girder: { tint: D(3), tintdark: D(3) }, gate_frame: { tint: D(3) },
+  crane_mast: { tint: D(3) }, crane_jib: { tint: D(3) }, trunk: { wood: 11, twigDark: 11 },
+  checkpoint_pad: { tint: D(13), tintlight: D(13), tintdark: D(15) }, road: { tint: 8, tintlight: D(1) },
+  stairs: { tint: D(1), tintdark: D(1), tintlight: D(1) }, slab: { tint: D(1), tintdark: D(1), tintlight: D(1) },
+  wall_panel: { tint: D(15), tintdark: D(15), tintlight: D(15) },
+  building_low: { tint: D(1), tintdark: D(1), tintlight: D(1) }, building_tall: { tint: D(1), tintdark: D(1), tintlight: D(1) },
+  tower_floor: { tint: D(1), tintlight: D(1), tintdark: D(1) },
+};
+const SURF_BY_MAT = { wood: 5, woodLight: 5, twig: 11, twigDark: 11, stone: D(15), brick: 6, steel: D(4), steelDark: D(4),
+  dirt: 10, straw: 9, trim: D(1), roofRed: D(7) };
 
 // 블렌더로 만든 코스 모델 (tools/assets.py → 맨 아래 #assets-glb). 이름 → 원본 Object3D
 // 재질 이름이 tint / tintdark / tintlight 인 부분은 붙일 때 고른 색(그대로·어둡게·밝게)으로 칠하고,
@@ -621,11 +681,17 @@ async function loadAssets() {
       if (!m.isMesh) return;
       const name = m.material.name.replace(/^jj_/, '');
       const hex = m.material.color.getHex();
+      m.userData.surf = SURF_BY_ASSET[o.name]?.[name] ?? SURF_BY_MAT[name];
       if (name in TINT_SCALE) m.userData.tint = TINT_SCALE[name];
       else m.material = name.startsWith('glow') ? mat(hex, hex, 0.8) : mat(hex);
     });
     ASSETS.set(o.name, o);
   }
+  // 실사 재질 사진: 게임을 만들기 전에 받아 둔다 (늦게 오면 그 사이 사진 칸이 검게 보임)
+  const tex = await new THREE.TextureLoader().loadAsync('textures.jpg');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  VERTEX_MAT.userData.atlas.value = tex;
 }
 
 // 구간별 팔레트
@@ -689,6 +755,7 @@ class Level {
           const c = m.material.color, col = new Float32Array(pos.count * 3);
           for (let i = 0; i < col.length; i += 3) { col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b; }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          g.setAttribute('surf', new THREE.BufferAttribute(new Float32Array(pos.count).fill(m.userData.surf ?? -1), 1));
         }
         g.applyMatrix4(m.matrixWorld);
         m.removeFromParent();
@@ -715,6 +782,7 @@ class Level {
     m.castShadow = false;
     m.receiveShadow = this.ctx.shadow;
     m.userData.static = !this.ctx.dynamic;   // _mergeStatic 대상
+    if (!emissive) m.userData.surf = D(1);   // 기본 도형도 콘크리트 무늬로 (원래 색 유지)
     parent.add(m);
     return m;
   }
@@ -842,7 +910,7 @@ class Level {
   _buildGround() {
     const g = new THREE.Group();
     this.root.add(g);
-    this.box(g, 340, 6, 340, 0x6f6a63, 0, -3, 0);              // 지면 (윗면 y=0)
+    this.box(g, 340, 6, 340, 0x6f6a63, 0, -3, 0).userData.surf = D(8);   // 지면 (윗면 y=0), 아스팔트 무늬
     this.colliders[this.colliders.length - 1].floor = true;     // 맨 밑 바닥: 닿으면 체크포인트로 복귀
     // 깨진 도로 판
     for (let i = 0; i < 26; i++) {
@@ -1349,7 +1417,8 @@ class Level {
     // 구름 (인스턴싱 1회 드로우콜) — 노을/정원 구간 아래쪽에 구름층
     if (sec.theme === 'garden' || sec.theme === 'industry') {
       const n = sec.theme === 'garden' ? 220 : 90;
-      const cloud = new THREE.InstancedMesh(G.ico, new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1 }), n);
+      // 실사 구름: 각진 도형 대신 둥근 공을 부드럽게, 살짝 비치게
+      const cloud = new THREE.InstancedMesh(CLOUD_GEO, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.88, depthWrite: false }), n);
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
       const baseY = sec.theme === 'garden' ? sec.from - 10 : sec.from + 40;
       for (let i = 0; i < n; i++) {
@@ -3719,6 +3788,9 @@ class Game {
     }, 'image/png');
   }
 }
+
+// 아이폰 사파리는 user-scalable=no 를 무시하므로 두 손가락 확대·두 번 톡 확대를 직접 막는다
+for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
 
 // 코스 모델을 먼저 풀어놓고 게임을 만든다 (Level 이 생성자에서 바로 모델을 쓰므로)
 loadAssets().then(() => {
