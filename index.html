@@ -167,6 +167,12 @@
   .keys-hint kbd { font-size: 0.75rem; text-shadow: none; }
 
   /* ───────── 일시정지 / 클리어 ───────── */
+  #intro { position: fixed; inset: 0; cursor: pointer; }
+  #intro .bar-top, #intro .bar-bot { position: absolute; left: 0; right: 0; height: 11vh; background: #000; }
+  #intro .bar-top { top: 0; } #intro .bar-bot { bottom: 0; }
+  #intro-cap { position: absolute; left: 16px; right: 16px; bottom: calc(11vh + 18px); margin: 0; text-align: center; color: #fff;
+    font-family: var(--display); font-size: clamp(1.1rem, 3.4vw, 1.9rem); text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+  #intro-skip { position: absolute; right: 16px; top: calc(11vh + 12px); }
   .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(27,35,64,.45); }
   .panel { background: var(--paper); border-radius: 26px; padding: 30px 34px; min-width: min(360px, 90vw); box-shadow: 0 24px 50px rgba(27,35,64,.35); }
   .panel h2 { font-family: var(--display); font-weight: 400; font-size: 2.1rem; margin: 0 0 18px; }
@@ -301,6 +307,13 @@
   .stage-pick { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
   .stage-pick .chip[aria-pressed="true"] { background: var(--gold); color: var(--ink); }
   .stage-pick .chip { display: inline-flex; align-items: center; gap: 8px; font-size: .95rem; }
+  .stage-pick.runs { margin-top: -10px; }
+  .stage-pick.runs .chip { font-size: .85rem; padding: .35em .9em; }
+  @media (max-height: 700px) {
+    .tagline { margin: 10px 0 14px; }
+    .stage-pick { gap: 6px; margin-bottom: 12px; }
+    .stage-pick.runs { margin-top: -6px; }
+  }
   .stage-pick .diff { padding: 2px 8px; border-radius: 999px; font-size: .82rem; font-weight: 700; color: #fff; }
   .stage-pick .diff.d0 { background: #3b7d4f; } .stage-pick .diff.d1 { background: #2f6fb0; }
   .stage-pick .diff.d2 { background: #c9661f; } .stage-pick .diff.d3 { background: #c23b3b; }
@@ -359,6 +372,10 @@
       <button class="chip" data-stage="1">2단계 · 공사장<span class="diff d1">★★☆☆ 보통</span><span class="earned" id="earned-1">☆☆☆</span></button>
       <button class="chip" data-stage="2">3단계 · 공중 정원<span class="diff d2">★★★☆ 어려움</span><span class="earned" id="earned-2">☆☆☆</span></button>
       <button class="chip" data-stage="3">4단계 · 성층권<span class="diff d3">★★★★ 매우 어려움</span><span class="earned" id="earned-3">☆☆☆</span></button>
+    </div>
+    <div class="stage-pick runs" role="group" aria-label="1~4단계 이어서">
+      <button class="chip" data-stage="full" title="1~4단계를 한 번에, 체크포인트 있음">전체 코스<span class="earned" id="earned-full">☆☆☆</span></button>
+      <button class="chip" data-stage="hard" title="1~4단계를 한 번에, 떨어지면 맨 처음부터">하드코어<span class="diff d3">중간 체크 X</span><span class="earned" id="earned-hard">☆☆☆</span></button>
     </div>
     <div class="menu-row">
       <button class="btn" id="btn-start-cam">카메라로 시작</button>
@@ -464,6 +481,13 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <div id="banner" aria-hidden="true"><span id="banner-num"></span><span id="banner-name"></span></div>
   <div id="hit-flash"></div>
+</section>
+
+<!-- 시작 컷신: 화면 아무 곳이나 누르거나 아무 키나 누르면 건너뛴다 -->
+<section id="intro" hidden>
+  <div class="bar-top"></div><div class="bar-bot"></div>
+  <p id="intro-cap" role="status" aria-live="polite"></p>
+  <button class="chip" id="intro-skip">건너뛰기</button>
 </section>
 
 <!-- 웹캠 창 (거울 모드 + 뼈대) -->
@@ -2003,6 +2027,28 @@ return { Bird, Feathers };
 })();
 const { Bird, Feathers } = BirdMod;
 // ===== ui.js =====
+// 압류딱지처럼 비스듬히 찍힌 빨간 '연습모드' 도장 (600×300). 잉크가 군데군데 빠진 자국까지
+function practiceStamp(font) {
+  const c = document.createElement('canvas');
+  c.width = 600; c.height = 300;
+  const x = c.getContext('2d');
+  x.translate(300, 150); x.rotate(-0.2);
+  x.strokeStyle = x.fillStyle = '#d0201c';
+  x.lineWidth = 12; x.strokeRect(-240, -95, 480, 190);
+  x.lineWidth = 4; x.strokeRect(-222, -77, 444, 154);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `bold 118px ${font}`; x.fillText('연습모드', 0, -12);
+  x.font = `bold 30px ${font}`; x.fillText('기 록   미 인 정', 0, 52);
+  x.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 500; i++) {
+    x.globalAlpha = Math.random() * 0.7;
+    x.fillRect(Math.random() * 500 - 250, Math.random() * 200 - 100, 1 + Math.random() * 5, 1 + Math.random() * 3);
+  }
+  x.globalCompositeOperation = 'source-over';
+  x.globalAlpha = 1;
+  return c;
+}
+
 // 단계 난이도 (코스는 높이 올라갈수록 발판 간격·장애물이 늘어난다)
 const STAGE_DIFF = ['★☆☆☆ 쉬움', '★★☆☆ 보통', '★★★☆ 어려움', '★★★★ 매우 어려움'];
 
@@ -2018,7 +2064,7 @@ const UIMod = (() => {
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages, onIntroSkip }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -2027,6 +2073,7 @@ class UI {
       loading: $('loading'),
       calib: $('calib'),
       away: $('away'),
+      intro: $('intro'),
     };
     $('btn-start-cam').addEventListener('click', onStartCamera);
     $('btn-start-key').addEventListener('click', onStartKeyboard);
@@ -2059,7 +2106,8 @@ class UI {
     $('btn-photo').addEventListener('click', onPhoto);
     $('btn-next').addEventListener('click', onNext);
     $('btn-stages').addEventListener('click', onStages);
-    for (const b of document.querySelectorAll('.stage-pick .chip')) b.addEventListener('click', () => onStage(Number(b.dataset.stage)));
+    for (const b of document.querySelectorAll('.stage-pick .chip')) b.addEventListener('click', () => onStage(b.dataset.stage === 'full' || b.dataset.stage === 'hard' ? b.dataset.stage : Number(b.dataset.stage)));
+    $('intro').addEventListener('click', onIntroSkip);
 
     this.el = {
       height: $('alt-now'),
@@ -2288,20 +2336,22 @@ class UI {
   }
 
   setTries(n) { this.el.tries.textContent = n; }
-  setCoins(n) { $('stat-coins').textContent = `${n}/3`; }
+  setCoins(n, total = 3) { $('stat-coins').textContent = `${n}/${total}`; }
+  setIntroCaption(t) { this._set('intro', t, (v) => { $('intro-cap').textContent = v; }); }
   // 단계 버튼에 그 단계에서 얻은 최고 별 수
   setEarned(i, n) { $(`earned-${i}`).textContent = '★'.repeat(n) + '☆'.repeat(3 - n); }
 
   // 단계 버튼: 고른 단계를 강조
   setStages(current) {
-    for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(Number(b.dataset.stage) === current));
+    for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(b.dataset.stage === String(current)));
   }
 
-  showClear({ time, falls, coins }, best, isNew, tries, practice, stage, stars) {
-    $('clear-coins').textContent = `${coins} / 3`;
-    $('clear-stars').innerHTML = ['클리어', '봉투 3개', '추락 0번'].map((label, i) =>
+  showClear({ time, falls, coins }, best, isNew, tries, practice, stage, stars, run = null) {
+    const total = run ? 12 : 3;
+    $('clear-coins').textContent = `${coins} / ${total}`;
+    $('clear-stars').innerHTML = ['클리어', `봉투 ${total}개`, '추락 0번'].map((label, i) =>
       `<span class="${stars[i] ? 'on' : ''}">${stars[i] ? '★' : '☆'} ${label}</span>`).join('');
-    $('clear-title').textContent = stage < 3 ? `${stage + 1}단계 클리어!` : '국세횡령왕 타이틀 획득!';
+    $('clear-title').textContent = run === 'hard' ? '하드코어 클리어! 국세횡령왕 타이틀 획득!' : stage < 3 ? `${stage + 1}단계 클리어!` : '국세횡령왕 타이틀 획득!';
     $('btn-next').hidden = stage >= 3;
     const fmt = fmtTime;
     $('photo-card').hidden = true;
@@ -3234,6 +3284,7 @@ class Game {
       onStage: (i) => this.pickStage(i),
       onNext: () => { this.stage = Math.min(3, this.stage + 1); this.start(); },
       onStages: () => this.goMenu(),
+      onIntroSkip: () => this.state === 'intro' && this._go(),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
@@ -3257,7 +3308,8 @@ class Game {
     this.stage = 0;
     this.level.showStage(0);
     this.ui.setStages(0);
-    for (let i = 0; i < 4; i++) this.ui.setEarned(i, loadJSON(`${STARS_KEY}-${i}`, 0));
+    this.run = null;                    // null = 한 단계만, 'full' = 1~4단계 이어서, 'hard' = 이어서 + 중간 체크 없음
+    for (const i of [0, 1, 2, 3, 'full', 'hard']) this.ui.setEarned(i, loadJSON(`${STARS_KEY}-${i}`, 0));
     this._loadRival().catch((e) => console.warn('라이벌 모델을 못 불러왔어요', e));
     this.tutorial = null;               // 진행 중이면 { i, value, doneT, lastYaw }
     this.ui.setTutorialToggle(this.settings.tutorial);
@@ -3425,6 +3477,7 @@ class Game {
     }
     if (e.code === 'Enter' && this.state === 'menu') { this.mode = 'keyboard'; this.start(); }
     if (e.code === 'Enter' && this.state === 'clear') this.start();
+    if (this.state === 'intro' && /^(Space|Enter|Escape)$/.test(e.code)) { this._go(); return; }
     if (this.state !== 'playing') return;
     if (e.code === 'Enter' && this.tutorial && TUTORIAL_STEPS[this.tutorial.i].final) this.endTutorial(false);
     if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
@@ -3433,6 +3486,7 @@ class Game {
     // 숫자키 1~4 = 그 단계 처음부터
     if (/^Digit[1-4]$/.test(e.code)) {
       this.stage = Number(e.code.slice(5)) - 1;
+      this.run = null;
       this.start();
     }
   }
@@ -3440,10 +3494,33 @@ class Game {
   // ── 게임 흐름 ──
   // 메뉴에서 단계 고르기: 그 단계만 보이고 그 출발점을 비춘다
   pickStage(i) {
-    this.stage = i;
-    this.level.showStage(i);
-    this.respawn(i);
+    this.run = typeof i === 'string' ? i : null;
+    this.stage = this.run ? 0 : i;
+    this.level.showStage(this.stage);
+    this.respawn(this.stage);
     this.ui.setStages(i);
+  }
+
+  get recKey() { return this.run ?? this.stage; }   // 기록·별 저장 이름
+
+  // 지금 단계만 보이고, 도착점은 다음 체크포인트(마지막 단계는 둥지)
+  _enterStage(st) {
+    this.stage = st;
+    this.level.showStage(st);
+    this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
+  }
+
+  // 전체 코스·하드코어: 단계 도착점에 닿으면 클리어 대신 다음 단계로 이어서
+  _advance() {
+    const st = this.stage + 1;
+    this.level.activateCheckpoint(this.level.checkpoints[st]);
+    this._enterStage(st);
+    this.mid = null;
+    if (this.run === 'full') { this.cpIndex = st; this.ui.toast('체크포인트! 다음 단계로 이어져요', 'gold'); }
+    else this.ui.toast('다음 단계! 떨어지면 맨 처음부터예요', 'warn');
+    this.sound.checkpoint();
+    this.feathers.emit(this.p.pos, 20, 0xf4c542, { speed: 5, up: 3, size: 0.22 });
+    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.toast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크', 'warn'), 2600);
   }
 
   // 일시정지 → 스테이지 선택 화면(메인 메뉴). 하던 판은 버린다
@@ -3451,20 +3528,19 @@ class Game {
     this.endTutorial(null);
     this.state = 'menu';
     this.ui.show('menu');
-    this.pickStage(this.stage);
+    this.pickStage(this.recKey);
   }
 
   start() {
-    const st = this.stage;
-    this.level.showStage(st);
+    const fromMenu = this.state === 'menu' || this.state === 'calibrating';
+    const st = this.run ? 0 : this.stage;
+    this._enterStage(st);
     this.level.resetCheckpoints();
     for (const cp of this.level.checkpoints) if (cp.index <= st) this.level.activateCheckpoint(cp);
-    // 도착점: 다음 체크포인트, 마지막 단계는 둥지
-    this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
-    this.best = loadJSON(`${BEST_KEY}-${st}`, null);
+    this.best = loadJSON(`${BEST_KEY}-${this.recKey}`, null);
     this.mid = null;                 // 이번 판에 닿은 중간 깃발
     this.level.resetEnvelopes();
-    this.ui.setCoins(0);
+    this.ui.setCoins(0, this.run ? 12 : 3);
     this._resetRival();
     this.stats = { time: 0, falls: 0, coins: 0 };
     this.tries = loadJSON(TRIES_KEY, 0) + 1;
@@ -3475,11 +3551,30 @@ class Game {
     this.cpIndex = st;
     this.maxSection = st;
     this.respawn(st);
+    this.endTutorial(null);
+    // 메뉴에서 맨 아래(1단계·전체 코스·하드코어)로 시작하면 컷신부터
+    if (fromMenu && st === 0) {
+      this.state = 'intro';
+      this.introT = 0;
+      this.introShot = 0;
+      this.ui.show('intro');
+      return;
+    }
+    this._go();
+  }
+
+  // 컷신이 끝나거나(건너뛰거나) 바로 시작할 때
+  _go() {
+    const st = this.stage;
+    this.level.showStage(st);
+    this._resetRival();
+    this.respawn(st);
     this.state = 'playing';
     this.ui.show('hud');
     this.ui.showSection(SECTIONS[st].name, st);
+    if (this.run === 'hard') this.ui.toast('하드코어: 떨어지면 맨 처음부터!', 'warn');
     this.clock.getDelta();
-    this.endTutorial(null);
+    this.input.consumeFlaps();
     if (this.settings.tutorial && st === 0) this.beginTutorial();
     if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.toast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크', 'warn'), 2600);
   }
@@ -3560,6 +3655,37 @@ class Game {
     this.ui.toast(skipped ? '튜토리얼을 건너뛰었어요' : '출발! 기록 측정을 시작해요', 'gold');
   }
 
+  // ── 시작 컷신 (약 7초): 꼭대기 둥지의 국세횡령왕 → 맨 아래 짭새 ──
+  _intro(dt) {
+    const t = (this.introT += dt);
+    this.ctrl.tilt = 0; this.ctrl.glide = false;
+    this.levelTime += dt;
+    this.level.update(this.levelTime, dt);
+    this.acc += dt;
+    while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }   // 짭새가 출발 발판에 내려앉게
+    const n = this.level.nest.position, s = this.p.pos, cam = this.camera.position;
+    if (t < 3.6) {
+      if (this.introShot !== 1) { this.introShot = 1; this.level.showStage(3); }
+      if (this.rival) this.rival.crown.rotation.y = t * 1.5;
+      const a = 0.6 + t * 0.35;
+      cam.set(n.x + Math.cos(a) * 11, n.y + 4 + t * 0.4, n.z + Math.sin(a) * 11);
+      _look.set(n.x + 2.4, n.y + 1.6, n.z);
+      this.ui.setIntroCaption(t < 1.8 ? '꼭대기 둥지, 압수된 세금을 깔고 앉은 국세횡령왕…' : '"짭새 따위가 여기까지 올라올 수 있을까? 크크크"');
+    } else {
+      if (this.introShot !== 2) { this.introShot = 2; this.level.showStage(this.stage); this._resetRival(); }
+      // 하늘 높이에서 짭새 등 뒤로 내려앉는다
+      const k = clamp((t - 3.6) / 2.6, 0, 1), e = 1 - (1 - k) ** 3;
+      _off.set(0, CONFIG.CAM_HEIGHT, CONFIG.CAM_DISTANCE).applyAxisAngle(UP, this.p.yaw);
+      _desired.copy(s).add(_off);
+      cam.set(s.x + 30 * (1 - e), s.y + 70 * (1 - e), s.z + 30 * (1 - e)).lerp(_desired, e);
+      _look.copy(s); _look.y += 1;
+      this.ui.setIntroCaption(t < 5.4 ? '그리고 맨 밑바닥, 쫓겨난 전설의 짭새.' : '타이틀을 되찾는 방법은 단 하나 — 꼭대기로!');
+    }
+    this.camLook.copy(_look);
+    this.camera.lookAt(_look);
+    if (t > 7.4) this._go();
+  }
+
   pause() { this.state = 'paused'; this.sound.wind(0, false); this.ui.show('pause', { camera: this.mode === 'camera' }); }
   resume() {
     if (this.mode === 'camera' && !this.pose.present) { this.goAway(); return; }
@@ -3608,22 +3734,24 @@ class Game {
     this.p.vel.set(0, 0, 0);
     this.clearT = 0;
     if (st < 3) this.level.activateCheckpoint(this.level.checkpoints[st + 1]);
-    this.ui.setStages(st);
+    const key = this.recKey;
+    this.ui.setStages(key);
     // 단계별 최고 기록: 시간이 빠를수록
     const rec = { time: this.stats.time, falls: this.stats.falls };
     const isNew = !this.practice && (!this.best || rec.time < this.best.time);
-    if (isNew) { this.best = rec; saveJSON(`${BEST_KEY}-${st}`, rec); }
+    if (isNew) { this.best = rec; saveJSON(`${BEST_KEY}-${key}`, rec); }
     // 별 평가: 클리어 / 봉투 3개 / 추락 0번. 연습 모드면 저장 안 함
-    const stars = [true, this.stats.coins >= 3, this.stats.falls === 0];
+    const stars = [true, this.stats.coins >= (this.run ? 12 : 3), this.stats.falls === 0];
     const starCount = stars.filter(Boolean).length;
-    if (!this.practice && starCount > loadJSON(`${STARS_KEY}-${st}`, 0)) saveJSON(`${STARS_KEY}-${st}`, starCount);
-    this.ui.setEarned(st, loadJSON(`${STARS_KEY}-${st}`, 0));
-    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st, stars);
+    if (!this.practice && starCount > loadJSON(`${STARS_KEY}-${key}`, 0)) saveJSON(`${STARS_KEY}-${key}`, starCount);
+    this.ui.setEarned(key, loadJSON(`${STARS_KEY}-${key}`, 0));
+    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st, stars, this.run);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
 
   respawn(idx) {
+    if (this.run && idx !== this.stage) this._enterStage(idx);   // 하드코어 추락 → 1단계로
     // 이번 단계에서 중간 깃발에 닿았으면 거기서 다시 시작
     const cp = this.mid && idx === this.stage ? this.mid : this.level.checkpoints[idx];
     const p = this.p;
@@ -3902,7 +4030,7 @@ class Game {
     const p = this.p;
     // 중간 깃발 발판에 내려앉으면, 그 뒤로는 떨어져도 여기서 다시 시작
     const m = this.level.mids.find((q) => q.sec === this.stage);
-    if (m && !this.mid && p.grounded) {
+    if (m && !this.mid && this.run !== 'hard' && p.grounded) {
       const mx = p.pos.x - m.position.x, mz = p.pos.z - m.position.z;
       if (mx * mx + mz * mz < 49 && Math.abs(p.pos.y - m.position.y) < 4) {
         this.mid = m;
@@ -3918,8 +4046,8 @@ class Game {
       e.got = true;
       for (const c of e.obj.children) c.visible = false;
       this.stats.coins++;
-      this.ui.setCoins(this.stats.coins);
-      this.ui.toast(`압수된 세금 봉투 ${this.stats.coins} / 3`, 'gold');
+      this.ui.setCoins(this.stats.coins, this.run ? 12 : 3);
+      this.ui.toast(`압수된 세금 봉투 ${this.stats.coins} / ${this.run ? 12 : 3}`, 'gold');
       this.sound.coin();
       this.feathers.emit(e.obj.position, 16, 0xf1e6cc, { speed: 5, up: 2, size: 0.24 });
     }
@@ -3927,7 +4055,9 @@ class Game {
     // 이 단계의 도착점(다음 체크포인트, 마지막 단계는 둥지)에 닿으면 단계 클리어
     const g = this.goal, gr = this.stage < 3 ? 7.5 : this.level.nest.radius + 0.5;
     const gx = p.pos.x - g.x, gz = p.pos.z - g.z, gy = p.pos.y - g.y;
-    if (gx * gx + gz * gz < gr * gr && gy > -1 && gy < 4.5) { this.clear(); return; }
+    if (gx * gx + gz * gz < gr * gr && gy > -1 && gy < 4.5) {
+      if (this.run && this.stage < 3) this._advance(); else { this.clear(); return; }
+    }
 
     // 맨 밑 바닥에 닿으면 마지막 체크포인트(없으면 출발점)로 돌아간다
     if (this.onFloor) {
@@ -3935,18 +4065,19 @@ class Game {
       if (!this.floorFallCounted) this.stats.falls++;
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
-      const back = this.cpIndex > 0 ? '체크포인트로 돌아가요' : '출발점으로 돌아가요';
+      const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : this.cpIndex > 0 ? '체크포인트로 돌아가요' : '출발점으로 돌아가요';
       if (!this._taunt(peak - p.pos.y, ' · ' + back)) this.ui.toast('바닥에 떨어졌어요! ' + back, 'warn');
       this.sound.respawn();
       return;
     }
 
-    const floor = (this.mid ?? this.level.checkpoints[this.cpIndex]).position.y - CONFIG.FALL_RESET_DEPTH;
+    const floor = (this.mid ?? this.level.checkpoints[this.stage]).position.y - CONFIG.FALL_RESET_DEPTH;
     if (p.pos.y < floor || p.pos.y < -40) {
       if (!p.fallCounted) this.stats.falls++;
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
-      if (!this._taunt(peak - p.pos.y, ' · 체크포인트에서 다시 시작해요')) this.ui.toast('체크포인트에서 다시 시작해요', 'warn');
+      const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : '체크포인트에서 다시 시작해요';
+      if (!this._taunt(peak - p.pos.y, ' · ' + back)) this.ui.toast(back, 'warn');
       this.sound.respawn();
     }
 
@@ -4055,6 +4186,8 @@ class Game {
       const st = this.pose.calibrationStatus();
       this.ui.updateCalib(st, this.pose.present);
       if (st.done) { const f = this.afterCalib; this.afterCalib = null; this.input.consumeFlaps(); f?.(); }
+    } else if (this.state === 'intro') {
+      this._intro(dt);
     } else if (this.state === 'menu' || this.state === 'clear' || this.state === 'loading') {
       this._attract(dt);
     }
@@ -4064,7 +4197,7 @@ class Game {
       const prev = this.clearT;
       this.clearT += dt;
       // 카메라가 둥지를 돌며 독수리를 비출 때쯤 클리어 기념사진
-      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
+      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = this.run ? `${this.run === 'hard' ? '하드코어' : '전체 코스'} 클리어 · 둥지 도착` : this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
       if (this.stage === 3) this._rivalScene(prev, this.clearT);
       if (this.clearT < 4.5 && Math.floor(prev / 0.7) !== Math.floor(this.clearT / 0.7)) {
         this.bird.triggerFlap(1);
@@ -4100,7 +4233,8 @@ class Game {
     });
 
     // 하늘·조명
-    this.level.updateAtmosphere(p.pos.y, { scene: this.scene, sun: this.sun, hemi: this.hemi, stars: this.stars });
+    const skyY = this.state === 'intro' ? this.camera.position.y : p.pos.y;
+    this.level.updateAtmosphere(skyY, { scene: this.scene, sun: this.sun, hemi: this.hemi, stars: this.stars });
     // 실사 조명: 하늘 환경광(scene.environment)이 주변광을 맡으니 반구광은 약하게, 햇빛은 세게 → 그림자 대비.
     // 안개는 멀리 밀어 공기 원근감만 남긴다
     this.hemi.intensity *= 0.35;
@@ -4113,11 +4247,12 @@ class Game {
       this.scene.fog.far *= 0.6;
       this.sun.intensity *= 0.45;
     }
-    this._updateSky(p.pos.y);
+    this._updateSky(skyY);
     this.stars.position.copy(this.camera.position);
     if (live) this._updateWeather(dt);
-    this.sun.position.copy(p.pos).add(this.sunOffset);
-    this.sun.target.position.copy(p.pos);
+    const focus = this.introShot === 1 && this.state === 'intro' ? this.level.nest.position : p.pos;   // 컷신 첫 장면은 둥지에 햇빛·그림자
+    this.sun.position.copy(focus).add(this.sunOffset);
+    this.sun.target.position.copy(focus);
 
     if (this.state === 'playing' || frozen) {
       this.ui.update({
@@ -4149,16 +4284,11 @@ class Game {
     x.fillStyle = '#fff';
     x.font = `56px ${font}`; x.fillText(title, 48, H - 118);
     x.font = `32px ${font}`;
-    x.fillText(`타이머 ${fmtTime(this.stats.time)}  ·  ${this.tries}번째 시도  ·  추락 ${this.stats.falls}번  ·  봉투 ${this.stats.coins}/3  ·  고도 ${Math.round(this.p.pos.y)}m`, 48, H - 62);
+    x.fillText(`타이머 ${fmtTime(this.stats.time)}  ·  ${this.tries}번째 시도  ·  추락 ${this.stats.falls}번  ·  봉투 ${this.stats.coins}/${this.run ? 12 : 3}  ·  고도 ${Math.round(this.p.pos.y)}m`, 48, H - 62);
     const now = new Date();
     x.font = `26px ${font}`; x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.9)';
     x.fillText(`짭새의 모험 · ${now.toLocaleDateString('ko-KR')}`, W - 40, 52);
-    if (this.practice) {   // 연습 판 사진은 기록이 아님을 분명히
-      x.textAlign = 'left'; x.font = `28px ${font}`;
-      const label = '연습 모드 · 기록 미인정', w = x.measureText(label).width + 36;
-      x.fillStyle = '#e8604c'; x.beginPath(); x.roundRect(36, 24, w, 48, 24); x.fill();
-      x.fillStyle = '#fff'; x.fillText(label, 54, 58);
-    }
+    if (this.practice) x.drawImage(practiceStamp(font), W / 2 - 300, H / 2 - 230);   // 연습 판 사진은 기록이 아님을 분명히
     const two = (n) => String(n).padStart(2, '0');   // 파일 이름용 현지 시각 20261031-0915
     const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
     this.photo = { canvas: c, name: `짭새의모험_${title.split(' ·')[0].replace(/[ !]/g, '')}_${stamp}.png` };
