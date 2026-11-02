@@ -936,7 +936,7 @@ class Level {
   // 한 단계만 보이게
   showStage(i) {
     // upTo: 전체 코스·하드코어는 지나온 단계도 그대로 보여서 코스가 하나로 이어진다
-    for (const o of this.root.children) o.visible = (this.upTo ? o.userData.sec.some((s) => s <= i) : o.userData.sec.includes(i)) && !(this.hideMids && o.userData.mid);
+    for (const o of this.root.children) o.visible = (this.upTo ? o.userData.sec.some((s) => s <= i && s >= this.lo) : o.userData.sec.includes(i)) && !(this.hideMids && o.userData.mid);
   }
 
   // ── 랜덤 헬퍼 ──
@@ -3054,6 +3054,48 @@ const TAUNTS = [
   '올라가는 건 오래, 떨어지는 건 순식간',
 ];
 
+// 떨어지는 도중 놀림. {m} = 잃은 높이, {n} = 도착까지 남았던 높이
+const FALL_TIERS = [18, 45, 90, 150];
+const FALL_ROASTS = [
+  ['삐뽀삐뽀~ 짭새 추락 경보 발령!', '어어? 날개 압수당했어요?', '중력한테 현행범으로 잡혔네', '추락 신고 접수됐습니다. 신고자: 본인'],
+  ['{m}m째 낙하 중… 이건 직무유기야', '서부경찰서에서 왜 쫓겨났는지 알겠다', '순찰 도는 척하지 마, 떨어지는 거잖아', '경찰 독수리 맞아? 닭장 출신 아니고?'],
+  ['{m}m… 징계위원회 소집합니다', '계급장 떼고 떨어지는 중', '국세횡령왕이 배 잡고 웃는 중 ㅋㅋㅋ', '추락 신기록 수립! 상장은 없음'],
+  ['{m}m 자유낙하. 파면입니다.', '올라온 시간 전부 증발 ㅋㅋㅋㅋ', '밑바닥 인생으로 리턴하시는 중', '중력의 끄나풀로 전직 축하드립니다'],
+];
+const FALL_ROASTS_NEAR = [
+  '도착 {n}m 앞에서 떨어지는 거 실화?', '다 잡은 범인 놓치는 짭새 클라스', '거의 다 왔는데… 그게 네 한계야', '코앞에서 놓치기, 경찰 업무랑 똑같네',
+];
+const FALL_ROASTS_FAST = [
+  '날개 펴! 펴라고!!', '활공! 활공!! 지금 아니면 끝이야!', '긴급 출동! 근데 방향이 아래야!', '살고 싶으면 날갯짓해 짭새야!!',
+];
+// 클리어 기념사진 한 줄: 시도 횟수 + 한 단계당 걸린 시간
+const ROAST_TRIES = [
+  [1, '첫판 클리어? 수상한데… 치트 수사 들어갑니다'],
+  [3, '{n}번 만에 클리어, 짭새치곤 봐줄 만하네'],
+  [10, '{n}번째 시도… 순경 시험도 이렇게 봤지?'],
+  [30, '{n}번 도전 끝에 겨우. 세금 낭비의 현장'],
+  [Infinity, '{n}번째… 이 정도면 여기가 네 직장이다'],
+];
+const ROAST_TIME = [
+  [45, '{t} 컷? 과속 단속 대상입니다'],
+  [120, '{t} 걸림. 출동 속도 평균은 하네'],
+  [300, '{t}… 신고하고 짜장면 시켜도 먼저 옴'],
+  [Infinity, '{t} 걸림. 범인은 이미 해외로 튐'],
+];
+function photoRoast(tries, perStage, time) {
+  const a = ROAST_TRIES.find(([n]) => tries <= n)[1].replace('{n}', tries);
+  const b = ROAST_TIME.find(([t]) => perStage < t)[1].replace('{t}', fmtTime(time));
+  return `${a} · ${b}`;
+}
+// 엔딩 자막 (클리어 뒤 시각 until 초까지)
+const ENDING = [
+  { until: 1.6, text: '국세횡령왕: 내… 내 왕관이!!' },
+  { until: 3.4, text: '왕관은 이제 전설의 짭새의 것.' },
+  { until: 5.4, text: '밑바닥에서 꼭대기까지. 오늘부터 국세횡령왕은 짭새다!' },
+  { until: 7.6, text: '…근데 압수한 세금은 언제 돌려줄 거야?' },
+];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 function loadJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
 }
@@ -3292,7 +3334,7 @@ class Game {
       onStage: (i) => this.pickStage(i),
       onNext: () => { this.stage = Math.min(3, this.stage + 1); this.start(); },
       onStages: () => this.goMenu(),
-      onIntroSkip: () => this.state === 'intro' && this._go(),
+      onIntroSkip: () => { if (this.state === 'intro') this._go(); else if (this.ending) this._finishEnding(); },
       onBack: () => this.state === 'playing' && this.backToCheckpoint(),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
@@ -3485,6 +3527,7 @@ class Game {
       else if (this.state === 'paused') this.resume();
     }
     if (e.code === 'Enter' && this.state === 'menu') { this.mode = 'keyboard'; this.start(); }
+    if (this.ending && /^(Space|Enter|Escape)$/.test(e.code)) { this._finishEnding(); return; }
     if (e.code === 'Enter' && this.state === 'clear') this.start();
     if (this.state === 'intro' && /^(Space|Enter|Escape)$/.test(e.code)) { this._go(); return; }
     if (this.state !== 'playing') return;
@@ -3525,6 +3568,7 @@ class Game {
     this.stage = st;
     this.level.hideMids = this.run === 'hard';
     this.level.upTo = !!this.run;
+    this.level.lo = 0;   // checkProgress 가 새 높이에 맞춰 바로 고친다
     this.level.showStage(st);
     this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
   }
@@ -3558,6 +3602,7 @@ class Game {
     for (const cp of this.level.checkpoints) if (cp.index <= st) this.level.activateCheckpoint(cp);
     this.best = loadJSON(`${BEST_KEY}-${this.recKey}`, null);
     this.mid = null;                 // 이번 판에 닿은 중간 깃발
+    this.ending = null;
     this.level.resetEnvelopes();
     this.ui.setCoins(0, this.run ? 12 : 3);
     this._resetRival();
@@ -3684,14 +3729,14 @@ class Game {
     while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }   // 짭새가 출발 발판에 내려앉게
     const n = this.level.nest.position, s = this.p.pos, cam = this.camera.position;
     if (t < 3.6) {
-      if (this.introShot !== 1) { this.introShot = 1; this.level.showStage(3); }
+      if (this.introShot !== 1) { this.introShot = 1; this.level.lo = 3; this.level.showStage(3); }
       if (this.rival) this.rival.crown.rotation.y = t * 1.5;
       const a = 0.6 + t * 0.35;
       cam.set(n.x + Math.cos(a) * 11, n.y + 4 + t * 0.4, n.z + Math.sin(a) * 11);
       _look.set(n.x + 2.4, n.y + 1.6, n.z);
       this.ui.setIntroCaption(t < 1.8 ? '꼭대기 둥지, 압수된 세금을 깔고 앉은 국세횡령왕…' : '"짭새 따위가 여기까지 올라올 수 있을까? 크크크"');
     } else {
-      if (this.introShot !== 2) { this.introShot = 2; this.level.showStage(this.stage); this._resetRival(); }
+      if (this.introShot !== 2) { this.introShot = 2; this.level.lo = 0; this.level.showStage(this.stage); this._resetRival(); }
       // 하늘 높이에서 짭새 등 뒤로 내려앉는다
       const k = clamp((t - 3.6) / 2.6, 0, 1), e = 1 - (1 - k) ** 3;
       _off.set(0, CONFIG.CAM_HEIGHT, CONFIG.CAM_DISTANCE).applyAxisAngle(UP, this.p.yaw);
@@ -3703,6 +3748,14 @@ class Game {
     this.camLook.copy(_look);
     this.camera.lookAt(_look);
     if (t > 7.4) this._go();
+  }
+
+  _finishEnding() {
+    const args = this.ending;
+    if (!args) return;
+    this.ending = null;
+    this.ui.showClear(...args);
+    if (this.photo) this.ui.showPhoto(this.photo.url, true);   // showClear 가 사진 칸을 비우므로 다시
   }
 
   pause() { this.state = 'paused'; this.sound.wind(0, false); this.ui.show('pause', { camera: this.mode === 'camera' }); }
@@ -3749,7 +3802,7 @@ class Game {
   clear() {
     this.state = 'clear';
     const n = this.goal, st = this.stage;
-    this.p.pos.set(n.x, n.y + 0.9, n.z);
+    this.p.pos.set(n.x, n.y + (st === 3 ? 2.2 : 0.9), n.z);   // 4단계: 알 더미 위에 올라앉아 왕관을 받는다
     this.p.vel.set(0, 0, 0);
     this.clearT = 0;
     if (st < 3) this.level.activateCheckpoint(this.level.checkpoints[st + 1]);
@@ -3764,7 +3817,10 @@ class Game {
     const starCount = stars.filter(Boolean).length;
     if (!this.practice && starCount > loadJSON(`${STARS_KEY}-${key}`, 0)) saveJSON(`${STARS_KEY}-${key}`, starCount);
     this.ui.setEarned(key, loadJSON(`${STARS_KEY}-${key}`, 0));
-    this.ui.showClear(this.stats, this.best, isNew, this.tries, this.practice, st, stars, this.run);
+    const args = [this.stats, this.best, isNew, this.tries, this.practice, st, stars, this.run];
+    this.ending = st === 3 ? args : null;
+    if (this.ending) this.ui.show('intro');   // 위아래 검은 띠 + 자막 (시작 컷신과 같은 화면)
+    else this.ui.showClear(...args);
     this.sound.clear();
     this.feathers.emit(_desired.copy(n).add(new THREE.Vector3(0, 2, 0)), 60, 0xf4c542, { speed: 9, up: 5, size: 0.3, life: 3 });
   }
@@ -3783,6 +3839,7 @@ class Game {
     p.stamina = CONFIG.STAMINA_MAX;
     p.airPeak = p.pos.y;
     p.fallCounted = false;
+    p.roastTier = 0; p.roastNear = p.roastFast = false;
     this.onFloor = false;
     this.camYaw = cp.yaw;
     _off.set(0, CONFIG.CAM_HEIGHT, CONFIG.CAM_DISTANCE).applyAxisAngle(UP, this.camYaw);
@@ -3961,15 +4018,29 @@ class Game {
       if (p.ground?.floor) return;
       if (this.state === 'playing') this._taunt(p.airPeak - p.pos.y);
       p.airPeak = p.pos.y; p.fallCounted = false;
+      p.roastTier = 0; p.roastNear = p.roastFast = false;
     }
     else {
       p.airPeak = Math.max(p.airPeak, p.pos.y);
       if (!p.fallCounted && this.state === 'playing' && p.airPeak - p.pos.y > C.FALL_COUNT_HEIGHT) {
         p.fallCounted = true;
         this.stats.falls++;
-        this.ui.toast('추락!', 'warn');
       }
+      if (this.state === 'playing') this._fallRoast(p);
     }
+  }
+
+  // 떨어지는 도중: 잃은 높이 단계마다 한 번씩. 도착 코앞에서 떨어지면 '아쉬움', 너무 빠르면 '급박함' 멘트가 먼저
+  _fallRoast(p) {
+    const lost = p.airPeak - p.pos.y;
+    const tier = FALL_TIERS.filter((h) => lost >= h).length;   // 0 = 아직 아님
+    if (tier <= (p.roastTier ?? 0)) return;
+    p.roastTier = tier;
+    const left = this.goal.y - p.airPeak;
+    let pool = FALL_ROASTS[tier - 1];
+    if (!p.roastNear && left < 25) { p.roastNear = true; pool = FALL_ROASTS_NEAR; }
+    else if (!p.roastFast && tier >= 2 && -p.vel.y > CONFIG.MAX_FALL_SPEED * 0.85) { p.roastFast = true; pool = FALL_ROASTS_FAST; }
+    this.ui.toast(pick(pool).replace('{m}', Math.round(lost)).replace('{n}', Math.max(1, Math.round(left))), 'warn');
   }
 
   // 크게 떨어져 높이를 lost(m) 잃었으면 놀림 멘트 (같은 멘트가 연달아 나오지 않게)
@@ -4101,6 +4172,11 @@ class Game {
     }
 
     const si = this.level.sectionAt(p.pos.y);
+    // 전체 코스·하드코어: 새보다 두 단계 이상 아래는 숨긴다 (부딪힘은 그대로라 떨어지면 다시 보임)
+    if (this.run && Math.max(0, si - 1) !== this.level.lo) {
+      this.level.lo = Math.max(0, si - 1);
+      this.level.showStage(this.stage);
+    }
     if (si > this.maxSection) {
       this.maxSection = si;
       this.ui.showSection(SECTIONS[si].name, si);
@@ -4159,7 +4235,8 @@ class Game {
     this.levelTime += dt;
     this.level.update(this.levelTime, dt);
     if (this.state === 'clear') {
-      this.orbitCamera(this.goal, 13, 5, 1, dt);
+      if (this.ending) this.orbitCamera(this.p.pos, 6, 2.6, 0.8, dt);   // 엔딩: 왕관 쓴 짭새를 가까이
+      else this.orbitCamera(this.goal, 13, 5, 1, dt);
     } else {
       this.acc += dt;
       while (this.acc >= STEP) { this.step(STEP); this.acc -= STEP; }
@@ -4216,8 +4293,14 @@ class Game {
       const prev = this.clearT;
       this.clearT += dt;
       // 카메라가 둥지를 돌며 독수리를 비출 때쯤 클리어 기념사진
-      if (prev < 1.2 && this.clearT >= 1.2) this.photoTitle = this.run ? `${this.run === 'hard' ? '하드코어' : '전체 코스'} 클리어 · 둥지 도착` : this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
+      const shot = this.stage === 3 ? 2.2 : 1.2;   // 4단계는 왕관이 머리에 얹힌 뒤에 찍는다
+      if (prev < shot && this.clearT >= shot) this.photoTitle = this.run ? `${this.run === 'hard' ? '하드코어' : '전체 코스'} 클리어 · 둥지 도착` : this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
       if (this.stage === 3) this._rivalScene(prev, this.clearT);
+      if (this.ending) {
+        const t = this.clearT;
+        this.ui.setIntroCaption(ENDING.find((e) => t < e.until)?.text ?? '');
+        if (t > 7.6) this._finishEnding();
+      }
       if (this.clearT < 4.5 && Math.floor(prev / 0.7) !== Math.floor(this.clearT / 0.7)) {
         this.bird.triggerFlap(1);
         this.feathers.emit(p.pos, 8, 0xf4c542, { speed: 4, up: 3, size: 0.22 });
@@ -4296,10 +4379,17 @@ class Game {
     const x = c.getContext('2d');
     const k = Math.max(W / src.width, H / src.height);   // 화면을 꽉 채우게 자른다
     x.drawImage(src, (W - src.width * k) / 2, (H - src.height * k) / 2, src.width * k, src.height * k);
-    const g = x.createLinearGradient(0, H - 240, 0, H);
-    g.addColorStop(0, 'rgba(27,35,64,0)'); g.addColorStop(1, 'rgba(27,35,64,.88)');
-    x.fillStyle = g; x.fillRect(0, H - 240, W, 240);
+    const g = x.createLinearGradient(0, H - 280, 0, H);
+    g.addColorStop(0, 'rgba(27,35,64,0)'); g.addColorStop(0.3, 'rgba(27,35,64,.55)'); g.addColorStop(1, 'rgba(27,35,64,.9)');
+    x.fillStyle = g; x.fillRect(0, H - 280, W, 280);
     const font = getComputedStyle(document.documentElement).getPropertyValue('--display');
+    x.fillStyle = '#fff';
+    const roast = photoRoast(this.tries, this.stats.time / (this.run ? 4 : 1), this.stats.time);
+    x.font = `30px ${font}`;
+    const rw = x.measureText(roast).width;
+    if (rw > W - 96) x.font = `${Math.floor(30 * (W - 96) / rw)}px ${font}`;   // 길면 한 줄에 맞게 줄인다
+    x.fillStyle = '#f4c542';
+    x.fillText(roast, 48, H - 186);
     x.fillStyle = '#fff';
     x.font = `56px ${font}`; x.fillText(title, 48, H - 118);
     x.font = `32px ${font}`;
@@ -4310,8 +4400,9 @@ class Game {
     if (this.practice) x.drawImage(practiceStamp(font), W / 2 - 300, H / 2 - 230);   // 연습 판 사진은 기록이 아님을 분명히
     const two = (n) => String(n).padStart(2, '0');   // 파일 이름용 현지 시각 20261031-0915
     const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
-    this.photo = { canvas: c, name: `짭새의모험_${title.split(' ·')[0].replace(/[ !]/g, '')}_${stamp}.png` };
-    this.ui.showPhoto(c.toDataURL('image/jpeg', 0.7), this.state === 'clear');
+    const url = c.toDataURL('image/jpeg', 0.7);
+    this.photo = { canvas: c, url, name: `짭새의모험_${title.split(' ·')[0].replace(/[ !]/g, '')}_${stamp}.png` };
+    this.ui.showPhoto(url, this.state === 'clear' && !this.ending);
   }
 
   savePhoto() {
