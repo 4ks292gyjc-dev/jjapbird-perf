@@ -2936,6 +2936,7 @@ const CONFIG = {
   // 충돌·착지
   BIRD_RADIUS: 0.55,
   LAND_NORMAL_Y: 0.6,        // 충돌면 법선의 y가 이보다 크면 '윗면' = 착지
+  STEP_UP: 1.1,              // 착지 가능한 상자의 윗면에서 이만큼 아래까지는 옆으로 부딪혀도 위로 올려 준다(계단 턱)
   GROUND_FRICTION: 9,
   BOUNCE: 0.45,              // 옆/아랫면 충돌 반발 계수
   KNOCKBACK: 6,              // 충돌 시 추가로 튕겨내는 속도
@@ -3243,6 +3244,7 @@ class MergedInput {
 
 // 재사용 벡터 (가비지 줄이기)
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
+const _upW = new THREE.Vector3();
 const _local = new THREE.Vector3(), _closest = new THREE.Vector3(), _diff = new THREE.Vector3();
 const _n = new THREE.Vector3(), _rel = new THREE.Vector3();
 const _off = new THREE.Vector3(), _desired = new THREE.Vector3(), _look = new THREE.Vector3();
@@ -4086,6 +4088,16 @@ class Game {
         else { _n.set(0, 0, Math.sign(_local.z) || 1); pen = ez + r; }
       }
       _n.transformDirection(c.obj.matrixWorld);       // 월드 법선
+      // 턱 넘기: 똑바로 선 착지용 상자의 윗면 가장자리 근처에 옆으로 들이받으면, 튕기지 않고 윗면으로 올려 준다
+      if (c.landable && _n.y <= C.LAND_NORMAL_Y && _n.y > -0.3 && _local.y > h.y - C.STEP_UP
+        && p.vel.dot(_n) < 0 && _upW.set(0, 1, 0).transformDirection(c.obj.matrixWorld).y > 0.9) {
+        _local.set(clamp(_local.x, -h.x + 0.1, h.x - 0.1), h.y + r, clamp(_local.z, -h.z + 0.1, h.z - 0.1));
+        p.pos.copy(_local).applyMatrix4(c.obj.matrixWorld);
+        if (p.vel.y < 0) p.vel.y = 0;
+        p.grounded = true;
+        ground = c;
+        continue;
+      }
       p.pos.addScaledVector(_n, pen);
 
       if (_n.y > C.LAND_NORMAL_Y && c.landable) {
