@@ -935,7 +935,8 @@ class Level {
 
   // 한 단계만 보이게
   showStage(i) {
-    for (const o of this.root.children) o.visible = o.userData.sec.includes(i) && !(this.hideMids && o.userData.mid);
+    // upTo: 전체 코스·하드코어는 지나온 단계도 그대로 보여서 코스가 하나로 이어진다
+    for (const o of this.root.children) o.visible = (this.upTo ? o.userData.sec.some((s) => s <= i) : o.userData.sec.includes(i)) && !(this.hideMids && o.userData.mid);
   }
 
   // ── 랜덤 헬퍼 ──
@@ -3514,12 +3515,16 @@ class Game {
     this.ui.toast(this.run === 'hard' ? '하드코어라 맨 처음으로 돌아왔어요' : this.mid ? '중간 깃발로 돌아왔어요' : '체크포인트로 돌아왔어요');
   }
 
+  // 이 단계 번호의 오브젝트가 지금 판에 살아 있나 (전체 코스·하드코어는 지나온 단계까지)
+  live(s) { return this.run ? s <= this.stage : s === this.stage; }
+
   get recKey() { return this.run ?? this.stage; }   // 기록·별 저장 이름
 
   // 지금 단계만 보이고, 도착점은 다음 체크포인트(마지막 단계는 둥지)
   _enterStage(st) {
     this.stage = st;
     this.level.hideMids = this.run === 'hard';
+    this.level.upTo = !!this.run;
     this.level.showStage(st);
     this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
   }
@@ -3901,7 +3906,7 @@ class Game {
     p.inWind = false;
     for (const z of this.level.windZones) {
       // 발판에 앉아 있는 동안은 바람을 안 맞는다 (쉬다가 밀려 떨어지지 않게)
-      if (!p.grounded && z.sec.includes(this.stage) && z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
+      if (!p.grounded && z.sec.some((s) => this.live(s)) && z.box.containsPoint(p.pos)) { p.vel.addScaledVector(z.force, dt); p.inWind = true; }
     }
 
     // 4) 활공: 날갯짓을 쉬면 하강 속도를 제한하고 앞으로 미끄러진다. T자 자세면 더 천천히
@@ -3983,7 +3988,7 @@ class Game {
     let ground = null;
     p.grounded = false;
     for (const c of this.level.colliders) {
-      if (!c.sec.includes(this.stage)) continue;   // 다른 단계의 오브젝트는 없는 것으로
+      if (!c.sec.some((s) => this.live(s))) continue;   // 다른 단계의 오브젝트는 없는 것으로
       // 대략 판정: 경계 구끼리 멀면 건너뜀
       const dx = p.pos.x - c.center.x, dy = p.pos.y - c.center.y, dz = p.pos.z - c.center.z;
       const rr = c.radius + r;
@@ -4056,7 +4061,7 @@ class Game {
     }
     // 세금 봉투
     for (const e of this.level.envelopes) {
-      if (e.sec !== this.stage || e.got || p.pos.distanceTo(e.obj.position) > 2) continue;
+      if (!this.live(e.sec) || e.got || p.pos.distanceTo(e.obj.position) > 2) continue;
       e.got = true;
       for (const c of e.obj.children) c.visible = false;
       this.stats.coins++;
@@ -4086,7 +4091,7 @@ class Game {
     }
 
     const floor = (this.mid ?? this.level.checkpoints[this.stage]).position.y - CONFIG.FALL_RESET_DEPTH;
-    if (p.pos.y < floor || p.pos.y < -40) {
+    if ((p.pos.y < floor && this.run !== 'hard') || p.pos.y < -40) {
       if (!p.fallCounted) this.stats.falls++;
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
