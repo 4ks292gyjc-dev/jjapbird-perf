@@ -163,7 +163,19 @@
     background: #16161d; color: #ffd84d; border: 2px solid var(--coral); box-shadow: 0 6px 18px rgba(0,0,0,.35);
     transition: opacity .2s, transform .2s;
   }
-  #roast::before { content: '🚨 '; }
+  #roast .who { display: block; font-size: .72rem; color: #ff8a75; letter-spacing: .5px; margin-bottom: 2px; }
+  #locker .panel { width: min(760px, 94vw); }
+  #locker h3 { font-family: var(--display); font-weight: 400; font-size: 1.15rem; margin: 0 0 8px; }
+  #locker h3 small { font-size: .85rem; color: var(--gold-deep); margin-left: 6px; }
+  .lk-cols { display: grid; gap: 18px 28px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 16px; }
+  .lk-rank { margin: 0 0 10px; } .lk-rank b { font-family: var(--display); font-size: 1.5rem; color: var(--coral); }
+  .lk-rank small { display: block; color: var(--ink-soft); }
+  .lk-cos { display: grid; gap: 8px; }
+  .lk-cos button { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; min-height: 44px; border: 0; border-radius: 12px; padding: .5em .9em; background: #e9eef5; color: var(--ink); font: inherit; }
+  .lk-cos button.on { background: var(--gold); }
+  .lk-cos button.locked { opacity: .65; }
+  .lk-cos button span:last-child { font-size: .85rem; color: var(--ink-soft); white-space: nowrap; }
+  #locker .hint { font-size: .8rem; color: var(--ink-soft); margin: 8px 0 0; }
   #roast.on { opacity: 1; transform: translate(-50%, 0) rotate(-1.5deg); }
 
   #banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; color: #fff; opacity: 0; text-shadow: 0 3px 12px rgba(27,35,64,.45); }
@@ -444,6 +456,23 @@
   @media (orientation: portrait) and (max-height: 680px) {
     .tagline { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   }
+  /* 낮은 가로 화면(작은 노트북·창 모드): 메뉴를 줄여 버튼이 모두 첫 화면에 */
+  @media (orientation: landscape) and (min-height: 501px) and (max-height: 700px) {
+    #menu { padding-top: 24px; padding-bottom: 24px; }
+    .title .t1 { font-size: 2rem; }
+    .title .t2 { font-size: 4rem; }
+    .tagline { font-size: .95rem; line-height: 1.5; margin: 10px 0 14px; }
+    .stage-pick { gap: 6px; margin-bottom: 12px; }
+    .stage-pick.runs { margin-top: -6px; }
+    .menu-row .btn { padding-top: .5em; padding-bottom: .5em; }
+    .tut-toggle { margin-top: 10px; }
+  }
+  @media (orientation: portrait) and (max-height: 680px) {
+    .title .t1 { font-size: 1.6rem; }
+    .title .t2 { font-size: 3rem; }
+    .menu-row .btn { padding-top: .5em; padding-bottom: .5em; }
+    .tut-toggle { margin-top: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -469,6 +498,7 @@
       <button class="btn ghost light" id="btn-start-key">키보드로 시작</button>
     </div>
     <button class="chip tut-toggle" id="btn-tutorial" aria-pressed="true">튜토리얼 켜짐</button>
+    <button class="chip tut-toggle" id="btn-locker">🏆 기록·꾸미기</button>
     <p id="cam-error" class="cam-error" role="alert" hidden></p>
     <p id="boot-error" class="cam-error" role="alert" hidden></p>
   </div>
@@ -567,7 +597,7 @@
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
-  <div id="roast" role="status" aria-live="polite"></div>
+  <div id="roast" role="status" aria-live="polite"><span class="who">👑 국세횡령왕</span><span id="roast-text"></span></div>
   <div id="banner" aria-hidden="true"><span id="banner-num"></span><span id="banner-name"></span></div>
   <div id="hit-flash"></div>
 </section>
@@ -631,6 +661,26 @@
         <input type="range" id="set-volume" min="0" max="1" step="0.05"></label>
       <p class="hint">감도는 카메라 조작에 적용돼요. 날갯짓이 잘 안 잡히면 날갯짓 감도를 올리고, 똑바로 서 있는데 새가 돌면 기울기 감도를 내려보세요.</p>
     </div>
+  </div>
+</section>
+
+<!-- 기록·꾸미기: 누적 통계(계급) + 꾸미기(클리어 보상·봉투로 사기) -->
+<section id="locker" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-labelledby="locker-title">
+    <h2 id="locker-title">기록·꾸미기</h2>
+    <div class="lk-cols">
+      <div>
+        <h3>내 흑역사</h3>
+        <p class="lk-rank">계급 <b id="lk-rank">순경</b> <small id="lk-next"></small></p>
+        <dl class="record" id="lk-stats"></dl>
+      </div>
+      <div>
+        <h3>꾸미기 <small>봉투 <b id="lk-wallet">0</b>개</small></h3>
+        <div class="lk-cos" id="lk-cos"></div>
+        <p class="hint">봉투는 코스에서 모은 세금 봉투예요. 클리어 보상은 깨면 자동으로 풀려요.</p>
+      </div>
+    </div>
+    <button class="btn" id="lk-close">닫기</button>
   </div>
 </section>
 
@@ -1937,7 +1987,51 @@ class Bird {
       wings: [['bone_5', 'bone_6'], ['bone_7', 'bone_8']].map(([sh, el]) => ({ sign: side(el), sh: joint(sh), el: joint(el) })),
       head: joint('tripoHead_0'), tail: joint('tripoTail_0'),
     };
+    // 장신구는 머리 뼈 위치에 붙인 묶음에 (몸을 숙이면 같이 숙는다)
+    this.acc = new THREE.Group();
+    this.acc.position.copy(model.getObjectByName('tripoHead_0').getWorldPosition(new THREE.Vector3()).applyMatrix4(bodyInv));
+    pose.add(this.acc);
+    this.meshes = [];
+    model.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.userData.baseColor = m.material.color.clone(); this.meshes.push(m); } });
+    if (this.look) this.setLook(this.look);
   }
+
+  // 꾸미기 적용: { skin: 'gold' | 'dark' | null, items: ['crown', ...] }
+  setLook(look) {
+    this.look = look;
+    if (!this.acc) return;   // 모델을 다 불러오면 다시 불린다
+    const tint = { gold: [1.7, 1.3, 0.35], dark: [0.35, 0.3, 0.45] }[look.skin] ?? [1, 1, 1];
+    for (const m of this.meshes) {
+      m.material.color.copy(m.userData.baseColor).multiply(new THREE.Color(...tint));
+      m.material.emissive?.setHex(look.skin === 'gold' ? 0x3a2a00 : 0x000000);
+    }
+    this.acc.clear();
+    this.parts = {};
+    const blackM = new THREE.MeshStandardMaterial({ color: 0x0b0b10, metalness: 0.6, roughness: 0.2 });
+    const goldM = new THREE.MeshStandardMaterial({ color: 0xffcf3a, emissive: 0x5a3c00, metalness: 0.85, roughness: 0.25 });
+    for (const id of look.items) {
+      const g = new THREE.Group();
+      if (id === 'crown') { g.add(makeCrown()); g.position.set(0, ACC_POS.crown, 0); g.scale.setScalar(0.9); }
+      if (id === 'shades') {
+        for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.03), blackM); l.position.set(sx * 0.1, 0, 0); g.add(l); }
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.02), blackM); g.add(bar);
+        g.position.set(0, ACC_POS.eyesY, ACC_POS.eyesZ);
+      }
+      if (id === 'siren') {
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.05, 10), blackM); g.add(base);
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 10), new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0xff0000, emissiveIntensity: 2 }));
+        lamp.position.y = 0.08; g.add(lamp);
+        g.position.set(0, ACC_POS.crown + (look.items.includes('crown') ? 0.28 : 0), 0);
+        this.parts.siren = lamp;
+      }
+      if (id === 'chain') { const c = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 6, 18), goldM); c.rotation.x = Math.PI / 2 - 0.4; g.add(c); g.position.set(0, ACC_POS.neckY, ACC_POS.neckZ); }
+      g.userData.id = id;
+      this.acc.add(g);
+    }
+  }
+
+  // 왕관만 잠깐 숨기기 (엔딩에서 라이벌 왕관이 날아올 때)
+  hideItem(id, hidden) { for (const g of this.acc?.children ?? []) if (g.userData.id === id) g.visible = !hidden; }
 
   _applyRig(s, dt) {
     const r = this.rig, q = _rigQ;
@@ -1971,6 +2065,11 @@ class Bird {
    */
   update(dt, s) {
     this.time += dt;
+    if (this.parts?.siren) {   // 경광등: 빨강·파랑 번갈아
+      const red = Math.floor(this.time * 4) % 2 === 0;
+      this.parts.siren.material.color.setHex(red ? 0xff2a2a : 0x2a6bff);
+      this.parts.siren.material.emissive.setHex(red ? 0xff0000 : 0x0040ff);
+    }
     let target;
     let sweepTarget = 0.15;
 
@@ -2159,7 +2258,7 @@ const UIMod = (() => {
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages, onIntroSkip, onBack }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages, onIntroSkip, onBack, onLocker, onCosmetic }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -2169,6 +2268,7 @@ class UI {
       calib: $('calib'),
       away: $('away'),
       intro: $('intro'),
+      locker: $('locker'),
     };
     $('btn-start-cam').addEventListener('click', onStartCamera);
     $('btn-start-key').addEventListener('click', onStartKeyboard);
@@ -2176,6 +2276,9 @@ class UI {
     $('btn-pause').addEventListener('click', onPause);
     $('btn-mute').addEventListener('click', onMute);
     $('btn-back').addEventListener('click', onBack);
+    $('btn-locker').addEventListener('click', onLocker);
+    $('lk-close').addEventListener('click', () => this.show('menu'));
+    $('lk-cos').addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b) onCosmetic(b.dataset.id); });
     $('btn-tutorial').addEventListener('click', onTutorialToggle);
     $('coach-skip').addEventListener('click', onTutorialSkip);
     $('coach-go').addEventListener('click', onTutorialGo);
@@ -2239,7 +2342,7 @@ class UI {
     if (name === 'pause') $('btn-recalib').hidden = !camera;
     if (name === 'menu') $('cam-error').hidden = true;
     $('cam').classList.toggle('large', name === 'calib');
-    const focus = { menu: 'btn-start-cam', pause: 'btn-resume', clear: 'btn-again' }[name];
+    const focus = { menu: 'btn-start-cam', pause: 'btn-resume', clear: 'btn-again', locker: 'lk-close' }[name];
     if (focus) requestAnimationFrame(() => $(focus).focus());
   }
 
@@ -2422,9 +2525,11 @@ class UI {
   }
 
   // 놀림 멘트: 안내 알림(toast)과 따로 뜨는 말풍선
-  roast(text) {
+  roast(text, sound = this.sound) {
     const r = this.el.roast;
-    r.textContent = text;
+    const now = performance.now();
+    if (sound && now - (this._laughAt ?? 0) > 3500) { this._laughAt = now; sound.laugh(); }
+    $('roast-text').textContent = text.replace(/^국세횡령왕: /, '');
     this._placeRoast();
     r.classList.remove('on');
     void r.offsetWidth;
@@ -2460,6 +2565,25 @@ class UI {
   // 단계 버튼: 고른 단계를 강조
   setStages(current) {
     for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(b.dataset.stage === String(current)));
+  }
+
+  // 기록·꾸미기 창 채우기
+  showLocker(life, cos) {
+    const [, rank] = rankOf(life.falls);
+    const next = RANKS.find(([n]) => n > life.falls);
+    $('lk-rank').textContent = rank;
+    $('lk-next').textContent = next ? `추락 ${next[0] - life.falls}번 더 하면 '${next[1]}' 승진` : '더 내려갈 데가 없다';
+    $('lk-stats').innerHTML = [
+      ['총 추락', `${life.falls}번`], ['총 추락 거리', `${(life.fallM / 1000).toFixed(2)}km`],
+      ['벽 박치기', `${life.hits}번`], ['클리어', `${life.clears}번`], ['모은 봉투', `${life.envelopes}개`],
+    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    const wallet = life.envelopes - life.spent;
+    $('lk-wallet').textContent = wallet;
+    $('lk-cos').innerHTML = COSMETICS.map((c) => {
+      const own = cos.owned.includes(c.id), on = cos.on.includes(c.id);
+      const tag = on ? '착용 중 ✓' : own ? '착용하기' : c.unlock ? `🔒 ${c.unlock}` : `봉투 ${c.price}개${wallet >= c.price ? ' · 사기' : ''}`;
+      return `<button data-id="${c.id}" class="${on ? 'on' : own ? '' : 'locked'}"><span>${c.name}${c.type === 'skin' ? ' <small>(색)</small>' : ''}</span><span>${tag}</span></button>`;
+    }).join('');
   }
 
   showClear({ time, falls, coins }, best, isNew, tries, practice, stage, stars, run = null) {
@@ -2597,6 +2721,16 @@ class Sound {
     [1046.5, 1318.5, 1568].forEach((f, i) => {
       this._tone(t + i * 0.11, f, 0.7, { gain: 0.18 });
       this._tone(t + i * 0.11, f * 2, 0.35, { gain: 0.04 });
+    });
+  }
+
+  // 국세횡령왕 웃음: 낮게 깔리는 '크크크크'
+  laugh() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [260, 240, 225, 205].forEach((f, i) => {
+      this._tone(t + i * 0.12, f, 0.1, { type: 'sawtooth', gain: 0.09, slideTo: f * 0.8 });
+      this._tone(t + i * 0.12, f * 1.5, 0.08, { type: 'square', gain: 0.03 });
     });
   }
 
@@ -3225,6 +3359,36 @@ function photoRoast(tries, perStage, time) {
   const b = roastPick(ROAST_TIME.find(([t]) => perStage < t)[1]).replace('{t}', fmtTime(time));
   return `${a} · ${b}`;
 }
+// 상황 맞춤 놀림 (떨어지기 시작할 때 일반 멘트보다 먼저)
+const SAME_SPOT_ROASTS = [
+  '또 거기? 거기 너 집이냐?', '같은 자리 {n}연속 추락 ㅋㅋ 학습 능력 0', '{n}번째 같은 데서 떨어짐. 거기 함정 아니고 너 실력이야',
+  '여기 너 전용 추락 포인트로 등록해 줄까?', '같은 실수 {n}번. 경찰이 수법을 안 바꾸네', '데자뷔 아님. 또 떨어진 거 맞음',
+];
+const EARLY_FALL_ROASTS = ['출발 몇 초 컷 ㅋㅋㅋ', '시작하자마자? 몸 좀 풀고 와', '출발선에서 추락하는 독수리 처음 봄', '타이머 켜지자마자 떨어지네 ㅋㅋ'];
+const NO_STAMINA_ROASTS = ['체력 관리도 실력이다 ㅋ', '체력 0으로 날겠다고? 배짱은 인정', '쉬라고 했잖아. 말 안 듣더니 꼴좋다', '파란 경고 무시한 대가 ㅋㅋ'];
+const GREEDY_ROASTS = ['봉투에 눈 멀었지? 탐욕의 대가다', '세금 봉투 챙기다 인생 떨어짐', '돈 앞에서 무너지는 짭새 ㅋㅋ', '압수품 슬쩍하다 추락. 업보다'];
+const MANY_FALL_ROASTS = ['이번 판 벌써 {n}번째 추락', '추락 {n}회 돌파! 축하… 아니 위로', '{n}번 떨어졌는데 아직도 해? 근성 인정', '{n}번째. 이쯤 되면 떨어지는 게 목표지?'];
+const SLOW_ROASTS = ['벌써 최고 기록보다 느림 ㅋㅋ 포기해', '지금 너 과거의 너한테 지는 중', '최고 기록 넘었다. 시간만 ㅋㅋ'];
+// 누적 통계 놀림 ({km} 총 추락 거리, {f} 총 추락, {h} 총 박치기, {e} 에베레스트 횟수, {r} 계급)
+const LIFE_ROASTS = [
+  '지금까지 총 {km}km 떨어졌다. 마라톤 뛰었냐?', '누적 추락 {f}번. 이 정도면 중력 홍보대사', '벽 박치기 누적 {h}번. 뇌는 괜찮냐?',
+  '누적 추락 거리 = 에베레스트 {e}번 굴러떨어진 거리', '총 {f}번 추락한 {r}님 또 떨어지십니다~', '네 인생 추락 통계 보면 국세청도 울겠다',
+];
+// 누적 추락 횟수 → 계급 (많이 떨어질수록 '승진')
+const RANKS = [[0, '순경'], [10, '경장'], [30, '경사'], [60, '경위'], [100, '경감'], [200, '경정'], [400, '총경'], [700, '경무관'], [1000, '파면 위기'], [2000, '중력의 노예']];
+const rankOf = (falls) => RANKS.filter(([n]) => falls >= n).pop();
+const LIFE_KEY = 'jjapsae-life';   // { falls, fallM, hits, envelopes, spent, clears }
+const COS_KEY = 'jjapsae-cos';     // { owned: [], on: [] }
+// 꾸미기: unlock 은 클리어 보상, price 는 봉투로 사기. skin 은 하나만, item 은 여러 개 착용
+const COSMETICS = [
+  { id: 'crown', name: '국세횡령왕 왕관', type: 'item', unlock: '4단계 클리어' },
+  { id: 'gold', name: '황금 짭새', type: 'skin', unlock: '하드코어 클리어' },
+  { id: 'shades', name: '잠복 선글라스', type: 'item', price: 10 },
+  { id: 'siren', name: '머리 위 경광등', type: 'item', price: 25 },
+  { id: 'chain', name: '압수한 금목걸이', type: 'item', price: 40 },
+  { id: 'dark', name: '흑화 짭새', type: 'skin', price: 60 },
+];
+
 // 같은 멘트가 연달아 안 나오게: 목록마다 섞어 두고 하나씩 꺼낸다 (다 쓰면 다시 섞음)
 const _roastBags = new Map();
 function roastPick(pool) {
@@ -3282,6 +3446,8 @@ function dotTexture() {
 }
 
 // 금관: 테 + 뾰족 장식 5개
+// 머리 뼈 기준 장신구 위치 (body 좌표, 앞 = -Z)
+const ACC_POS = { crown: 0.42, eyesY: 0.08, eyesZ: -0.3, neckY: -0.2, neckZ: -0.14 };
 function makeCrown() {
   const gold = new THREE.MeshStandardMaterial({ color: 0xffcf3a, emissive: 0x6a4800, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide });
   const g = new THREE.Group();
@@ -3485,6 +3651,8 @@ class Game {
       onStages: () => this.goMenu(),
       onIntroSkip: () => { if (this.state === 'intro') this._go(); else if (this.ending) this._finishEnding(); },
       onBack: () => this.state === 'playing' && this.backToCheckpoint(),
+      onLocker: () => { this.ui.showLocker(this.life, this.cos); this.ui.show('locker'); },
+      onCosmetic: (id) => this.useCosmetic(id),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
@@ -3497,6 +3665,7 @@ class Game {
       onTutorialGo: () => this.endTutorial(false),
     });
     this.ui.setTouchMode(IS_TOUCH);
+    this.ui.sound = this.sound;   // 놀림 말풍선이 뜰 때 국세횡령왕 웃음
     this.kb.bindTouch({
       steer: document.getElementById('t-steer'), act: document.getElementById('t-act'),
       knob: document.getElementById('t-knob'), pad: document.getElementById('t-pad'),
@@ -3508,6 +3677,9 @@ class Game {
     this.stage = 0;
     this.level.showStage(0);
     this.ui.setStages(0);
+    this.life = { falls: 0, fallM: 0, hits: 0, envelopes: 0, spent: 0, clears: 0, ...loadJSON(LIFE_KEY, {}) };
+    this.cos = { owned: [], on: [], ...loadJSON(COS_KEY, {}) };
+    this._applyLook();
     this.run = null;                    // null = 한 단계만, 'full' = 1~4단계 이어서, 'hard' = 이어서 + 중간 체크 없음
     for (const i of [0, 1, 2, 3, 'full', 'hard']) this.ui.setEarned(i, loadJSON(`${STARS_KEY}-${i}`, 0));
     this._loadRival().catch((e) => console.warn('라이벌 모델을 못 불러왔어요', e));
@@ -3711,6 +3883,73 @@ class Game {
   // 이 단계 번호의 오브젝트가 지금 판에 살아 있나 (전체 코스·하드코어는 지나온 단계까지)
   live(s) { return this.run ? s <= this.stage : s === this.stage; }
 
+  // ── 누적 통계·꾸미기 ──
+  _saveLife() { saveJSON(LIFE_KEY, this.life); }
+
+  // 추락 1회: 이번 판 + 누적. 계급이 오르면 '승진' 놀림
+  _fell() {
+    this.stats.falls++;
+    const before = rankOf(this.life.falls)[1];
+    this.life.falls++;
+    this._saveLife();
+    const after = rankOf(this.life.falls)[1];
+    if (after !== before) this.ui.roast(`누적 추락 ${this.life.falls}번 달성! '${after}'(으)로 승진 축하 ㅋㅋㅋ`, this.sound);
+  }
+
+  _applyLook() {
+    const skin = this.cos.on.find((id) => COSMETICS.find((c) => c.id === id)?.type === 'skin') ?? null;
+    this.bird.setLook({ skin, items: this.cos.on.filter((id) => COSMETICS.find((c) => c.id === id)?.type === 'item') });
+  }
+
+  // 꾸미기 버튼: 가진 건 착용/해제, 봉투로 사는 건 사서 바로 착용
+  useCosmetic(id) {
+    const c = COSMETICS.find((x) => x.id === id), cos = this.cos, life = this.life;
+    if (!cos.owned.includes(id)) {
+      if (c.unlock) { this.ui.toast(`${c.unlock} 하면 풀려요`); return; }
+      if (life.envelopes - life.spent < c.price) { this.ui.toast(`봉투가 ${c.price - (life.envelopes - life.spent)}개 모자라요`); return; }
+      life.spent += c.price;
+      this._saveLife();
+      cos.owned.push(id);
+    }
+    if (cos.on.includes(id)) cos.on = cos.on.filter((x) => x !== id);
+    else {
+      if (c.type === 'skin') cos.on = cos.on.filter((x) => COSMETICS.find((k) => k.id === x).type !== 'skin');   // 색은 하나만
+      cos.on.push(id);
+    }
+    saveJSON(COS_KEY, cos);
+    this._applyLook();
+    this.ui.showLocker(life, cos);
+  }
+
+  // 클리어 보상 풀기 (처음 한 번만 알림)
+  _unlock(id) {
+    if (this.cos.owned.includes(id)) return null;
+    this.cos.owned.push(id);
+    this.cos.on.push(id);
+    if (id === 'gold') this.cos.on = this.cos.on.filter((x) => x !== 'dark');
+    saveJSON(COS_KEY, this.cos);
+    this._applyLook();
+    return COSMETICS.find((c) => c.id === id).name;
+  }
+
+  // 떨어지기 시작할 때 상황에 딱 맞는 놀림이 있으면 그것 (없으면 null)
+  _situation(p) {
+    const at = p.peakPos;
+    this.sameSpot = at && this.lastFallAt && at.distanceTo(this.lastFallAt) < 8 ? this.sameSpot + 1 : 1;
+    this.lastFallAt = at?.clone();
+    const L = this.life, f = this.stats.falls;
+    if (this.sameSpot >= 2) return roastPick(SAME_SPOT_ROASTS).replace(/\{n\}/g, this.sameSpot);
+    if (this.stats.time < 6) return roastPick(EARLY_FALL_ROASTS);
+    if (p.stamina < CONFIG.STAMINA_MAX * 0.05 && CONFIG.STAMINA_ENABLED) return roastPick(NO_STAMINA_ROASTS);
+    if (this.simTime - (this.lastCoinT ?? -99) < 3) return roastPick(GREEDY_ROASTS);
+    if (f >= 5 && f % 5 === 0) return roastPick(MANY_FALL_ROASTS).replace(/\{n\}/g, f);
+    if (L.falls >= 10 && Math.random() < 0.25) {
+      return roastPick(LIFE_ROASTS).replace('{km}', (L.fallM / 1000).toFixed(1)).replace('{f}', L.falls).replace('{h}', L.hits)
+        .replace('{e}', (L.fallM / 8848).toFixed(1)).replace('{r}', rankOf(L.falls)[1]);
+    }
+    return null;
+  }
+
   get recKey() { return this.run ?? this.stage; }   // 기록·별 저장 이름
 
   // 지금 단계만 보이고, 도착점은 다음 체크포인트(마지막 단계는 둥지)
@@ -3754,6 +3993,8 @@ class Game {
     this.best = loadJSON(`${BEST_KEY}-${this.recKey}`, null);
     this.mid = null;                 // 이번 판에 닿은 중간 깃발
     this.ending = null;
+    this.slowRoasted = false;
+    this.sameSpot = 0; this.lastFallAt = null;
     this.level.resetEnvelopes();
     this.ui.setCoins(0, this.run ? 12 : 3);
     this._resetRival();
@@ -3785,6 +4026,7 @@ class Game {
     this._resetRival();
     this.respawn(st);
     this.state = 'playing';
+    this.bird.hideItem('crown', false);
     this.ui.show('hud');
     this.ui.showSection(SECTIONS[st].name, st);
     if (this.run === 'hard') this.ui.toast('하드코어: 떨어지면 맨 처음부터!', 'warn');
@@ -3907,6 +4149,14 @@ class Game {
     this.ending = null;
     this.ui.showClear(...args);
     if (this.photo) this.ui.showPhoto(this.photo.url, true);   // showClear 가 사진 칸을 비우므로 다시
+    this._announceRewards();
+  }
+
+  _announceRewards() {
+    if (!this.rewards?.length) return;
+    this.ui.toast(`보상 획득: ${this.rewards.join(', ')}! 메뉴 > 기록·꾸미기`, 'gold');
+    this.ui.roast('내… 내 물건을 가져가다니… 두고 보자', this.sound);
+    this.rewards = null;
   }
 
   pause() { this.state = 'paused'; this.sound.wind(0, false); this.ui.show('pause', { camera: this.mode === 'camera' }); }
@@ -3968,8 +4218,13 @@ class Game {
     const starCount = stars.filter(Boolean).length;
     if (!this.practice && starCount > loadJSON(`${STARS_KEY}-${key}`, 0)) saveJSON(`${STARS_KEY}-${key}`, starCount);
     this.ui.setEarned(key, loadJSON(`${STARS_KEY}-${key}`, 0));
+    this.life.clears++;
+    this._saveLife();
+    // 엔딩 이후 보상: 4단계 클리어 → 왕관, 하드코어 클리어(연습 모드 아님) → 황금 짭새
+    this.rewards = [st === 3 && this._unlock('crown'), this.run === 'hard' && !this.practice && this._unlock('gold')].filter(Boolean);
     const args = [this.stats, this.best, isNew, this.tries, this.practice, st, stars, this.run];
     this.ending = st === 3 ? args : null;
+    if (!this.ending) this._announceRewards();
     if (this.ending) this.ui.show('intro');   // 위아래 검은 띠 + 자막 (시작 컷신과 같은 화면)
     else this.ui.showClear(...args);
     this.sound.clear();
@@ -4169,13 +4424,14 @@ class Game {
       if (p.ground?.floor) return;
       if (this.state === 'playing') this._taunt(p.airPeak - p.pos.y);
       p.airPeak = p.pos.y; p.fallCounted = false;
+      (p.peakPos ??= new THREE.Vector3()).copy(p.pos);
       p.roastTier = 0; p.roastNear = p.roastFast = false;
     }
     else {
-      p.airPeak = Math.max(p.airPeak, p.pos.y);
+      if (p.pos.y >= p.airPeak) { p.airPeak = p.pos.y; (p.peakPos ??= new THREE.Vector3()).copy(p.pos); }
       if (!p.fallCounted && this.state === 'playing' && p.airPeak - p.pos.y > C.FALL_COUNT_HEIGHT) {
         p.fallCounted = true;
-        this.stats.falls++;
+        this._fell();
       }
       if (this.state === 'playing') this._fallRoast(p);
     }
@@ -4187,6 +4443,7 @@ class Game {
     const tier = FALL_TIERS.filter((h) => lost >= h).length;   // 0 = 아직 아님
     if (tier <= (p.roastTier ?? 0)) return;
     p.roastTier = tier;
+    if (tier === 1) { const sp = this._situation(p); if (sp) { this.ui.roast(sp, this.sound); return; } }
     const left = this.goal.y - p.airPeak;
     let pool = FALL_ROASTS[tier - 1];
     if (!p.roastNear && left < 25) { p.roastNear = true; pool = FALL_ROASTS_NEAR; }
@@ -4196,6 +4453,7 @@ class Game {
 
   // 크게 떨어져 높이를 lost(m) 잃었으면 놀림 멘트 (같은 멘트가 연달아 나오지 않게)
   _taunt(lost) {
+    if (lost >= CONFIG.FALL_COUNT_HEIGHT) { this.life.fallM += lost; this._saveLife(); }
     if (lost < TAUNT_DROP) return;
     this.ui.roast(roastPick(TAUNTS).replace(/\{m\}/g, Math.round(lost)));
   }
@@ -4263,6 +4521,7 @@ class Game {
             p.stun = C.STUN_TIME;
             this.shake = 0.35;
             this.ui.flashHit();
+            if (this.state === 'playing') { this.life.hits++; this._saveLife(); }
             if (this.state === 'playing' && Math.random() < 0.6) this.ui.roast(roastPick(HIT_ROASTS));
             this.sound.hit();
             this.feathers.emit(p.pos, 10, 0x7a4e30, { speed: 5, up: 1, size: 0.2 });
@@ -4293,6 +4552,9 @@ class Game {
     for (const e of this.level.envelopes) {
       if (!this.live(e.sec) || e.got || p.pos.distanceTo(e.obj.position) > 2) continue;
       e.got = true;
+      this.lastCoinT = this.simTime;
+      this.life.envelopes++;
+      this._saveLife();
       for (const c of e.obj.children) c.visible = false;
       this.stats.coins++;
       this.ui.setCoins(this.stats.coins, this.run ? 12 : 3);
@@ -4311,7 +4573,7 @@ class Game {
     // 맨 밑 바닥에 닿으면 마지막 체크포인트(없으면 출발점)로 돌아간다
     if (this.onFloor) {
       this.onFloor = false;
-      if (!this.floorFallCounted) this.stats.falls++;
+      if (!this.floorFallCounted) this._fell();
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
       const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : this.cpIndex > 0 ? '체크포인트로 돌아가요' : '출발점으로 돌아가요';
@@ -4323,7 +4585,7 @@ class Game {
 
     const floor = (this.mid ?? this.level.checkpoints[this.stage]).position.y - CONFIG.FALL_RESET_DEPTH;
     if ((p.pos.y < floor && this.run !== 'hard') || p.pos.y < -40) {
-      if (!p.fallCounted) this.stats.falls++;
+      if (!p.fallCounted) this._fell();
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
       const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : '체크포인트에서 다시 시작해요';
@@ -4428,6 +4690,7 @@ class Game {
       if (n === 8) this.acc = 0;
 
       if (!this.tutorial) this.stats.time += dt;   // 튜토리얼 중에는 시간 안 셈
+      if (this.best && !this.slowRoasted && this.stats.time > this.best.time) { this.slowRoasted = true; this.ui.roast(roastPick(SLOW_ROASTS), this.sound); }
       const still = p.grounded && !this.tutorial && Math.hypot(p.vel.x, p.vel.z) < 0.5 && Math.abs(this.ctrl.tilt) < 0.1;
       this.idleT = still ? (this.idleT || 0) + dt : 0;
       if (this.idleT > 9) { this.idleT = -12; this.ui.roast(roastPick(IDLE_ROASTS)); }   // 한 번 놀리면 21초 뒤에 또
@@ -4460,6 +4723,7 @@ class Game {
       const shot = this.stage === 3 ? 2.2 : 1.2;   // 4단계는 왕관이 머리에 얹힌 뒤에 찍는다
       if (prev < shot && this.clearT >= shot) this.photoTitle = this.run ? `${this.run === 'hard' ? '하드코어' : '전체 코스'} 클리어 · 둥지 도착` : this.stage < 3 ? `${this.stage + 1}단계 클리어 · ${SECTIONS[this.stage].name}` : '클리어! 둥지 도착';
       if (this.stage === 3) this._rivalScene(prev, this.clearT);
+      this.bird.hideItem('crown', this.stage === 3);
       if (this.ending) {
         const t = this.clearT;
         this.ui.setIntroCaption(ENDING.find((e) => t < e.until)?.text ?? '');
