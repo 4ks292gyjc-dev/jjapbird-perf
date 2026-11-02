@@ -263,6 +263,8 @@
   body.touch .hud-btns { top: max(12px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
   body.touch .stats { top: max(10px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); gap: 14px; }
   body.touch .stats div span { font-size: .68rem; }
+  /* 터치: 위쪽 줄이 꽉 차서 오른쪽 가운데(비어 있는 자리)에 둔다 */
+  body.touch #btn-back { position: fixed; top: 42%; right: max(16px, env(safe-area-inset-right, 0px)); }
   body.touch .stats div b { font-size: 1.15rem; }
   body.touch .cluster { top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; padding: 6px 12px; grid-template-columns: auto 120px auto; gap: 10px; border-radius: 16px; }
   body.touch #flap-ind { width: 38px; height: 38px; }
@@ -422,6 +424,7 @@
   <div class="hud-btns">
     <button class="chip" id="btn-pause" aria-label="일시정지">일시정지</button>
     <button class="chip" id="btn-mute" aria-pressed="false">소리 켜짐</button>
+    <button class="chip" id="btn-back" title="마지막 중간 깃발·체크포인트로 (R)" >체크포인트로</button>
   </div>
 
   <div class="stats">
@@ -897,9 +900,12 @@ class Level {
       const g = new THREE.Group();
       g.position.copy(m.pos);
       g.rotation.y = m.yaw;
+      g.userData.mid = true;
       this.root.add(g);
+      this.ctx.dynamic = true;   // 하드코어에서 숨겨야 해서 합치지 않는다
       this.mesh(g, G.cyl6, 0xdde3ea, 2.2, 1.6, 0, 0.12, 3.2, 0.12);
       this.mesh(g, G.box, 0xf4c542, 2.8, 2.8, 0, 1.1, 0.7, 0.05, null, 0x8a6a00);
+      this.ctx.dynamic = false;
       this.mids.push({ sec: si, position: m.pos.clone(), yaw: m.yaw });
       // 봉투: 단계를 4등분한 세 지점의 발판 사이, 길에서 옆으로 4m·위로 4m (살짝 돌아가야 먹는 자리)
       for (let k = 1; k <= 3; k++) {
@@ -929,7 +935,7 @@ class Level {
 
   // 한 단계만 보이게
   showStage(i) {
-    for (const o of this.root.children) o.visible = o.userData.sec.includes(i);
+    for (const o of this.root.children) o.visible = o.userData.sec.includes(i) && !(this.hideMids && o.userData.mid);
   }
 
   // ── 랜덤 헬퍼 ──
@@ -2064,7 +2070,7 @@ const UIMod = (() => {
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages, onIntroSkip }) {
+  constructor({ onStartCamera, onStartKeyboard, onResume, onRestart, onRecalibrate, onPause, onSettings, onMute, onTutorialToggle, onTutorialSkip, onTutorialGo, onPhoto, onStage, onNext, onStages, onIntroSkip, onBack }) {
     this.screens = {
       menu: $('menu'),
       hud: $('hud'),
@@ -2080,6 +2086,7 @@ class UI {
     $('btn-recalib').addEventListener('click', onRecalibrate);
     $('btn-pause').addEventListener('click', onPause);
     $('btn-mute').addEventListener('click', onMute);
+    $('btn-back').addEventListener('click', onBack);
     $('btn-tutorial').addEventListener('click', onTutorialToggle);
     $('coach-skip').addEventListener('click', onTutorialSkip);
     $('coach-go').addEventListener('click', onTutorialGo);
@@ -3285,6 +3292,7 @@ class Game {
       onNext: () => { this.stage = Math.min(3, this.stage + 1); this.start(); },
       onStages: () => this.goMenu(),
       onIntroSkip: () => this.state === 'intro' && this._go(),
+      onBack: () => this.state === 'playing' && this.backToCheckpoint(),
       onRecalibrate: () => this.beginCalibration(() => this.resume()),
       onPause: () => { if (this.state === 'playing') this.pause(); },
       onSettings: (s) => this.applySettings({ ...this.settings, ...s }),
@@ -3480,7 +3488,7 @@ class Game {
     if (this.state === 'intro' && /^(Space|Enter|Escape)$/.test(e.code)) { this._go(); return; }
     if (this.state !== 'playing') return;
     if (e.code === 'Enter' && this.tutorial && TUTORIAL_STEPS[this.tutorial.i].final) this.endTutorial(false);
-    if (e.code === 'KeyR') { this.respawn(this.cpIndex); this.ui.toast('체크포인트로 돌아왔어요'); }
+    if (e.code === 'KeyR') this.backToCheckpoint();
     if (e.code === 'KeyM') this.applySettings({ ...this.settings, muted: !this.settings.muted });
     if (e.code === 'KeyC') this.savePhoto();
     // 숫자키 1~4 = 그 단계 처음부터
@@ -3495,10 +3503,15 @@ class Game {
   // 메뉴에서 단계 고르기: 그 단계만 보이고 그 출발점을 비춘다
   pickStage(i) {
     this.run = typeof i === 'string' ? i : null;
-    this.stage = this.run ? 0 : i;
-    this.level.showStage(this.stage);
+    this._enterStage(this.run ? 0 : i);
     this.respawn(this.stage);
     this.ui.setStages(i);
+  }
+
+  // R 키·체크포인트 버튼: 마지막 중간 깃발(없으면 체크포인트)로
+  backToCheckpoint() {
+    this.respawn(this.cpIndex);
+    this.ui.toast(this.run === 'hard' ? '하드코어라 맨 처음으로 돌아왔어요' : this.mid ? '중간 깃발로 돌아왔어요' : '체크포인트로 돌아왔어요');
   }
 
   get recKey() { return this.run ?? this.stage; }   // 기록·별 저장 이름
@@ -3506,6 +3519,7 @@ class Game {
   // 지금 단계만 보이고, 도착점은 다음 체크포인트(마지막 단계는 둥지)
   _enterStage(st) {
     this.stage = st;
+    this.level.hideMids = this.run === 'hard';
     this.level.showStage(st);
     this.goal = st < 3 ? this.level.checkpoints[st + 1].position : this.level.nest.position;
   }
