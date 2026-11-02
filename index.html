@@ -359,6 +359,78 @@
     .hl { animation: none; outline: 3px solid var(--gold); }
     #banner.on { animation: none; opacity: 1; }
   }
+
+  /* ───────── 기기별 다듬기 (데스크탑·폰·패드) ───────── */
+  /* 터치: 손가락으로 누르기 쉬운 높이(44px) */
+  body.touch .chip, body.touch .btn { min-height: 44px; }
+  /* 알림은 위쪽 기울기·체력 판 바로 아래 (판을 가리지 않게) */
+  body.touch #toast { top: calc(max(10px, env(safe-area-inset-top, 0px)) + 102px); }
+  @media (pointer: coarse) and (orientation: portrait) {
+    body.touch #toast { top: calc(max(10px, env(safe-area-inset-top, 0px)) + 156px); }
+  }
+  body.touch.coaching #toast { top: 300px; }
+  /* 넓은 가로 화면: 클리어·일시정지 창을 두 칸으로 나눠 스크롤 없이 한눈에 */
+  @media (min-width: 700px) and (orientation: landscape) {
+    #clear .panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); column-gap: 28px; width: min(1080px, 94vw); align-items: start; }
+    #clear .panel > * { grid-column: 1; }
+    #clear .panel > .clear-photo { grid-column: 2; grid-row: 1 / 5; margin: 0; align-self: center; }
+    #clear .panel > .clear-btns { grid-column: 1 / -1; grid-row: 5; margin-top: 14px; justify-content: center; }
+    #pause .panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); column-gap: 32px; width: min(880px, 94vw); align-items: start; }
+    #pause .panel > h2 { grid-column: 1 / -1; }
+    #pause .settings { margin-top: 0; padding-top: 0; border-top: 0; }
+  }
+  /* 낮은 화면(폰·작은 노트북): 창 여백·글자를 줄인다 */
+  @media (max-height: 860px) {
+    .panel { padding: 20px 26px; }
+    .panel h2 { margin: 0 0 10px; }
+    .record { gap: 2px 20px; margin-bottom: 12px; }
+    .record dd { font-size: 1.2rem; }
+    .clear-stars { margin: 0 0 10px; }
+    .new-record { margin: 0 0 10px; }
+    .settings { gap: 8px; }
+    .settings .hint { font-size: .78rem; }
+    .clear-photo { margin-bottom: 10px; }
+  }
+  @media (max-height: 500px) and (orientation: landscape) {
+    .panel { padding: 14px 20px; border-radius: 20px; }
+    .panel h2 { font-size: 1.3rem; margin: 0 0 6px; }
+    .record { font-size: .9rem; }
+    .record dd { font-size: 1rem; }
+    .record dd.best { font-size: .9rem; padding-top: 0; }
+    .clear-btns .btn, #pause .col .btn { font-size: 1rem; padding: .45em 1.1em; }
+    .settings .hint { display: none; }
+    .settings label { gap: 0; font-size: .85rem; }
+    /* 메뉴: 단계 버튼 2열로 → 키운 버튼도 첫 화면에 */
+    .title-block { max-width: none; }
+    .stage-pick:not(.runs) { display: grid; grid-template-columns: repeat(2, max-content); }
+  }
+  /* 작은 폰 세로(높이 760 이하): 제목·사진을 조금 더 줄여 스크롤 없이 */
+  @media (orientation: portrait) and (max-height: 760px) {
+    .panel h2 { font-size: 1.6rem; }
+    .clear-photo { max-height: 19vh; width: auto; max-width: 100%; margin-inline: auto; }
+    .settings input[type=range] { height: 22px; }
+  }
+  /* 단계 버튼 글자가 두 줄로 깨지지 않게 */
+  .stage-pick .chip { white-space: nowrap; }
+  @media (max-width: 380px) {
+    .stage-pick .chip { font-size: .8rem; gap: 5px; padding-left: .7em; padding-right: .7em; }
+  }
+  /* 폰 가로: 튜토리얼 버튼을 시작 버튼 옆으로 (아래로 잘리지 않게) */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .menu-row { display: inline-flex; vertical-align: middle; }
+    .tut-toggle { margin: 0 0 0 12px; vertical-align: middle; }
+  }
+  /* 작은 세로 폰: 메뉴 제목·소개를 줄여 시작 버튼이 첫 화면에 */
+  @media (orientation: portrait) and (max-height: 760px) {
+    .title .t1 { font-size: 1.9rem; }
+    .title .t2 { font-size: 3.6rem; }
+    .tagline { font-size: .9rem; line-height: 1.5; margin: 10px 0 14px; }
+    .stage-pick { gap: 6px; margin-bottom: 12px; }
+    .stage-pick.runs { margin-top: -6px; }
+  }
+  @media (orientation: portrait) and (max-height: 680px) {
+    .tagline { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  }
 </style>
 </head>
 <body>
@@ -1165,9 +1237,11 @@ class Level {
     for (let i = 0; i < n; i++) {
       // 진행 방향(-Z)으로 올라가는 계단, 마지막 단 윗면이 y=0
       const k = n - 1 - i;
-      this.collider(g, 3.2, 0.6, 1.4, 0, -k * 0.9 - 0.3, k * step - step * (n - 1) / 2);
+      const c = this.collider(g, 3.2, 0.6, 1.4, 0, -k * 0.9 - 0.3, k * step - step * (n - 1) / 2);
+      if (c) c.step = true;   // 계단 단: 턱에 걸리지 않고 올라선다 (collide 의 턱 넘기)
     }
-    this.collider(g, 3.2, 0.6, 2.4, 0, -0.3, -step * (n - 1) / 2 - 1.9);  // 꼭대기 넓은 단
+    const top = this.collider(g, 3.2, 0.6, 2.4, 0, -0.3, -step * (n - 1) / 2 - 1.9);  // 꼭대기 넓은 단
+    if (top) top.step = true;
     this.asset(g, 'stairs', 0, 0, 0, 1, 1, 1, null, col);                // 같은 배치 + 난간·측보
   }
 
@@ -2936,7 +3010,7 @@ const CONFIG = {
   // 충돌·착지
   BIRD_RADIUS: 0.55,
   LAND_NORMAL_Y: 0.6,        // 충돌면 법선의 y가 이보다 크면 '윗면' = 착지
-  STEP_UP: 1.1,              // 착지 가능한 상자의 윗면에서 이만큼 아래까지는 옆으로 부딪혀도 위로 올려 준다(계단 턱)
+  STEP_UP: 1.1,              // 계단 단 윗면에서 이만큼 아래까지는 옆으로 부딪혀도 위로 올려 준다(턱)
   GROUND_FRICTION: 9,
   BOUNCE: 0.45,              // 옆/아랫면 충돌 반발 계수
   KNOCKBACK: 6,              // 충돌 시 추가로 튕겨내는 속도
@@ -4088,8 +4162,8 @@ class Game {
         else { _n.set(0, 0, Math.sign(_local.z) || 1); pen = ez + r; }
       }
       _n.transformDirection(c.obj.matrixWorld);       // 월드 법선
-      // 턱 넘기: 똑바로 선 착지용 상자의 윗면 가장자리 근처에 옆으로 들이받으면, 튕기지 않고 윗면으로 올려 준다
-      if (c.landable && _n.y <= C.LAND_NORMAL_Y && _n.y > -0.3 && _local.y > h.y - C.STEP_UP
+      // 턱 넘기(계단만): 단 윗면 가장자리 근처에 옆으로 들이받으면, 튕기지 않고 윗면으로 올려 준다
+      if (c.step && _n.y <= C.LAND_NORMAL_Y && _n.y > -0.3 && _local.y > h.y - C.STEP_UP
         && p.vel.dot(_n) < 0 && _upW.set(0, 1, 0).transformDirection(c.obj.matrixWorld).y > 0.9) {
         _local.set(clamp(_local.x, -h.x + 0.1, h.x - 0.1), h.y + r, clamp(_local.z, -h.z + 0.1, h.z - 0.1));
         p.pos.copy(_local).applyMatrix4(c.obj.matrixWorld);
