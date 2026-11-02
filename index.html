@@ -150,8 +150,21 @@
     background: var(--paper); transition: opacity .2s, transform .2s;
   }
   #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  #toast, #roast { width: max-content; max-width: min(92vw, 560px); text-align: center; word-break: keep-all; }
   #toast[data-kind="gold"] { background: var(--gold); }
   #toast[data-kind="warn"] { background: var(--coral); color: #fff; }
+  #toast[data-kind="stamina"] { background: #2f6fb0; color: #fff; }
+  #toast[data-kind="stamina"]::before { content: '⚡ '; }
+  /* 놀림 멘트: 안내 알림과 구분되는 검은 말풍선 */
+  #roast {
+    position: absolute; left: 50%; top: 76px; max-width: min(92vw, 560px); width: max-content; text-align: center;
+    transform: translate(-50%, -8px) rotate(-1.5deg); opacity: 0; pointer-events: none; z-index: 2;
+    font-family: var(--display); font-size: 1.15rem; line-height: 1.3; padding: .5em 1em; border-radius: 14px;
+    background: #16161d; color: #ffd84d; border: 2px solid var(--coral); box-shadow: 0 6px 18px rgba(0,0,0,.35);
+    transition: opacity .2s, transform .2s;
+  }
+  #roast::before { content: '🚨 '; }
+  #roast.on { opacity: 1; transform: translate(-50%, 0) rotate(-1.5deg); }
 
   #banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; color: #fff; opacity: 0; text-shadow: 0 3px 12px rgba(27,35,64,.45); }
   #banner.on { animation: banner 2.8s ease-out forwards; }
@@ -554,6 +567,7 @@
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="roast" role="status" aria-live="polite"></div>
   <div id="banner" aria-hidden="true"><span id="banner-num"></span><span id="banner-name"></span></div>
   <div id="hit-flash"></div>
 </section>
@@ -2205,6 +2219,7 @@ class UI {
       flap: $('flap-ind'),
       state: $('flight-state'),
       toast: $('toast'),
+      roast: $('roast'),
       banner: $('banner'),
       bannerNum: $('banner-num'),
       bannerName: $('banner-name'),
@@ -2395,8 +2410,27 @@ class UI {
     t.textContent = text;
     t.dataset.kind = kind;
     t.classList.add('on');
+    this._placeRoast();
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
+  }
+
+  // 놀림 말풍선은 안내 알림 바로 아래 (알림이 두 줄이면 그만큼 더 아래)
+  _placeRoast() {
+    const t = this.el.toast, on = t.classList.contains('on');
+    this.el.roast.style.top = `${t.offsetTop + (on ? t.offsetHeight + 10 : 0)}px`;
+  }
+
+  // 놀림 멘트: 안내 알림(toast)과 따로 뜨는 말풍선
+  roast(text) {
+    const r = this.el.roast;
+    r.textContent = text;
+    this._placeRoast();
+    r.classList.remove('on');
+    void r.offsetWidth;
+    r.classList.add('on');
+    clearTimeout(this._roastTimer);
+    this._roastTimer = setTimeout(() => r.classList.remove('on'), 2600);
   }
 
   showSection(name, index) {
@@ -3113,54 +3147,94 @@ const TUTORIAL_STEPS = [
     highlight: [],
   },
 ];
-// 크게 떨어져 높이를 잃었을 때 띄우는 놀림 멘트. {m} = 잃은 높이(m)
-const TAUNT_DROP = 30;   // 이만큼(m) 이상 잃어야 놀린다
+// ── 놀림 멘트 (반말·독설). 짭새·경찰 소재. {m} = 잃은 높이, {n} = 남았던 높이/시도 횟수, {t} = 걸린 시간 ──
+const TAUNT_DROP = 30;   // 착지했을 때 이만큼(m) 이상 잃었으면 놀린다
+// 착지·복귀했을 때 (크게 떨어진 뒤)
 const TAUNTS = [
-  '방금 {m}m 날려먹었어요',
-  '중력 1승, 짭새 0승',
-  '{m}m 무료 낙하 체험, 즐거우셨나요?',
-  '추락 현장 조사 나왔습니다… 범인은 본인이네요',
-  '날개는 장식이었군요',
-  '현행범 체포! 혐의: 중력 무시',
-  '닭도 이것보단 잘 날겠어요',
-  '{m}m 아래에서 다시 만나요',
-  '방금 그건 일부러 그런 거죠?',
-  '경찰 독수리 체면이 말이 아니네요',
-  '올라가는 건 오래, 떨어지는 건 순식간',
+  '방금 {m}m 날려먹었다 ㅋㅋ', '중력 1승, 짭새 0승', '{m}m 무료 낙하 체험, 즐거웠냐?', '추락 현장 조사 결과… 범인은 너',
+  '날개는 장식이었구나', '현행범 체포! 혐의: 중력 무시', '닭도 이것보단 잘 날겠다', '{m}m 다시 올라가 ㅋㅋ 고생해라',
+  '방금 그건 일부러 그런 거지?', '경찰 독수리 체면 다 구겼다', '올라가는 건 오래, 떨어지는 건 순식간', '착지는 잘하네. 추락 전문이라 그런가',
+  '살아는 있네? 아쉽다', '네 플레이 보다가 국세횡령왕 잠듦', '이 정도면 중력이랑 사귀는 거지?', '다시 올라와 봐. 어차피 또 떨어지겠지만',
+  '바닥이 그렇게 좋냐?', '이번엔 몇 m 떨어졌게? {m}m ㅋㅋㅋ', '야 그래도 포기는 하지 마. 보는 맛이 있거든', '{m}m… 엘리베이터도 이렇게 빨리는 안 내려가',
+  '방금 거 리플레이로 백 번 보고 싶다', '네 손가락한테 사과해라', '하… 내가 다 민망하다', '세금으로 키운 독수리가 이 꼴이라니',
+  '와 진짜 개못하네 ㅋㅋㅋ', '다시 해. 이번엔 눈 뜨고', '이게 전설의 짭새? 전설은 무슨', '{m}m 손해. 이자까지 쳐서 갚아라',
 ];
-
-// 떨어지는 도중 놀림. {m} = 잃은 높이, {n} = 도착까지 남았던 높이
+// 떨어지는 도중: 잃은 높이 18/45/90/150m 마다 한 번 (단계가 클수록 세게)
 const FALL_TIERS = [18, 45, 90, 150];
 const FALL_ROASTS = [
-  ['삐뽀삐뽀~ 짭새 추락 경보 발령!', '어어? 날개 압수당했어요?', '중력한테 현행범으로 잡혔네', '추락 신고 접수됐습니다. 신고자: 본인'],
-  ['{m}m째 낙하 중… 이건 직무유기야', '서부경찰서에서 왜 쫓겨났는지 알겠다', '순찰 도는 척하지 마, 떨어지는 거잖아', '경찰 독수리 맞아? 닭장 출신 아니고?'],
-  ['{m}m… 징계위원회 소집합니다', '계급장 떼고 떨어지는 중', '국세횡령왕이 배 잡고 웃는 중 ㅋㅋㅋ', '추락 신기록 수립! 상장은 없음'],
-  ['{m}m 자유낙하. 파면입니다.', '올라온 시간 전부 증발 ㅋㅋㅋㅋ', '밑바닥 인생으로 리턴하시는 중', '중력의 끄나풀로 전직 축하드립니다'],
+  ['삐뽀삐뽀 추락 경보 발령!', '어어? 날개 압수당했냐?', '중력한테 현행범으로 잡혔네', '추락 신고 접수. 신고자: 너', '어디 가? 아래로?',
+   '방금 그거 날갯짓이었어? 경련인 줄', '떨어진다 떨어진다 ㅋㅋ', '야 위로 가라고 위로', '짭새 하강 개시~', '손 미끄러졌지? 아니면 원래 못하는 거?',
+   '이게 비행이면 벽돌도 난다', '날개 장식용이냐', '중력: 1승 추가요~', '무단이탈 감지. 방향: 아래', '어 어 어 어 ㅋㅋㅋ'],
+  ['{m}m째 낙하 중… 직무유기 수준', '서부경찰서에서 왜 쫓겨났는지 알겠다', '순찰 도는 척하지 마, 떨어지는 거잖아', '경찰 독수리 맞냐? 닭장 출신 아니고?',
+   '{m}m 공짜로 내려가는 중 ㅋㅋ', '지금 이거 보는 사람 다 웃고 있다', '날갯짓 할 줄 모르면 튜토리얼 다시 봐', '네 실력도 같이 추락 중',
+   '아직도 떨어지냐? 집중 좀 해', '와 이걸 못 버텨?', '경찰학교 낙제생 클라스', '{m}m 증발. 박수 👏', '중력이 너 체포했다', '야 이건 진짜 못하는 거다', '추락도 재능이네 ㅋㅋ'],
+  ['{m}m… 징계위원회 소집합니다', '계급장 떼고 떨어지는 중', '국세횡령왕이 배 잡고 웃는 중 ㅋㅋㅋ', '추락 신기록 수립! 상장은 없음', '{m}m 날려먹고 기분 어떠냐?',
+   '이 정도면 일부러 그러는 거지?', '네가 올라온 노력 = 0', '보는 내가 다 아깝다', '지금이라도 접어. 아니 접지 마, 더 보고 싶어', '이거 녹화해서 신입 교육용으로 쓴다',
+   '{m}m 자유낙하 무료 체험 당첨!', '방금 너 때문에 세금 낭비됨', '중력 상대로 0:{m} 완패', '아 ㅋㅋ 진짜 개못하네', '내려가는 속도만 국가대표급'],
+  ['{m}m 자유낙하. 파면입니다.', '올라온 시간 전부 증발 ㅋㅋㅋㅋ', '밑바닥 인생으로 리턴하시는 중', '중력의 끄나풀로 전직 축하', '{m}m… 이건 추락이 아니라 은퇴다',
+   '지금 화났지? ㅋㅋㅋ 화나면 지는 거야', '이 판 기록: 실패. 사유: 너', '이 정도면 낙하산 부대로 전과해', '국세횡령왕: 고마워, 덕분에 왕관 지킴',
+   '{m}m. 네 자존심도 같이 떨어짐', '야 그래도 끄지 마라 ㅋㅋ 다시 올라와 봐', '이 맛에 이 게임 하지 ㅋㅋㅋ', '눈물 닦고 처음부터~', '{m}m 떨어지는 동안 반성은 했냐?'],
 ];
+// 도착 코앞에서 떨어질 때
 const FALL_ROASTS_NEAR = [
   '도착 {n}m 앞에서 떨어지는 거 실화?', '다 잡은 범인 놓치는 짭새 클라스', '거의 다 왔는데… 그게 네 한계야', '코앞에서 놓치기, 경찰 업무랑 똑같네',
+  '{n}m! {n}m 남았었다고!!', '손 뻗으면 닿는 거리였는데 ㅋㅋㅋ', '아까비~ 아니 그냥 못한 거야', '골대 앞 헛발질 장인', '여기서 떨어지는 게 더 어렵겠다',
+  '방금 그거 평생 생각날걸?', '국세횡령왕이 손 흔들어 주는 중 ㅂㅂ', '{n}m 차이로 인생 갈림', '눈앞에서 놓치니까 맛있지?', '아 진짜 아깝다… 고 할 줄 알았지? 고소하다',
 ];
+// 최고 속도 가까이 떨어질 때
 const FALL_ROASTS_FAST = [
-  '날개 펴! 펴라고!!', '활공! 활공!! 지금 아니면 끝이야!', '긴급 출동! 근데 방향이 아래야!', '살고 싶으면 날갯짓해 짭새야!!',
+  '날개 펴! 펴라고!!', '활공! 활공!! 지금 아니면 끝이야!', '긴급 출동! 근데 방향이 아래야!', '살고 싶으면 날갯짓해 짭새야!!', 'Shift! Shift 눌러!! 아 늦었다',
+  '브레이크 없냐?!', '지금 시속 얼마냐 ㅋㅋㅋ', '추락 속도 단속 대상입니다!!', '팔 벌려! 팔!!', '아 이건 못 살린다 ㅋㅋ', '버둥버둥 ㅋㅋㅋ 소용없어', '비상! 비상!! 짭새 추락 중!!',
+];
+// 장애물에 부딪혀 휘청일 때
+const HIT_ROASTS = [
+  '벽이랑 하이파이브 ㅋㅋ', '앞을 보고 날아라 짭새야', '음주비행 단속 걸렸습니다', '부딪히는 게 취미냐?', '쿵! 방금 머리에서 소리 났다',
+  '장애물이 너 피해 줄 줄 알았지?', '눈 감고 나냐?', '헬멧 지급 시급', '그거 피하라고 있는 거야', '충돌 사고 접수. 가해자: 너', '독수리 시력 어디 갔냐',
+  '아야 ㅋㅋ 아팠겠다', '박치기 대회 나가라', '방금 거 보험 처리 안 돼', '와 정면으로 꽂네 ㅋㅋㅋ', '피할 생각은 1도 없었지?', '내비게이션 고장났냐',
+];
+// 발판에서 한참 가만히 있을 때
+const IDLE_ROASTS = [
+  '뭐 해? 명상해?', '잠복근무 중이냐?', '쉬는 건 좋은데 해 지겠다', '무서워서 못 뛰겠지? ㅋㅋ', '거기서 평생 살 거냐',
+  '근무 태만으로 신고 들어왔다', '타이머는 계속 가는 중~', '움직여. 국세횡령왕 기다리다 늙는다', '발판이랑 정들었냐', '용기 충전 중? 충전기 고장났나 봐',
+];
+// 체크포인트 버튼(R)을 눌렀을 때
+const BACK_ROASTS = [
+  '또 도망가냐?', '무르기 없다 했지', '포기 버튼 눌렀네 ㅋㅋ', '체크포인트 중독자', '현장 이탈 기록 남음', '다시 해도 결과는 같을걸?', '도망치는 짭새 ㅋㅋ', '그래, 다시 해봐. 기대는 안 해',
+];
+// 중간 깃발·다음 단계에 닿았을 때 (비꼬는 칭찬)
+const PRAISE_ROASTS = [
+  '운 좋았네', '여기까진 누구나 와', '깃발 꽂았다고 다 된 줄 알지?', '오 생각보다 오래 버티네', '여기서 떨어지면 개웃기겠다',
+  '이번 건 봐준다', '오 운빨 미쳤네', '여기서부턴 진짜 어렵다? 울지 마라', '한 칸 올라왔다고 우쭐하지 마', '실력인지 운인지 곧 알게 될 거야',
 ];
 // 클리어 기념사진 한 줄: 시도 횟수 + 한 단계당 걸린 시간
 const ROAST_TRIES = [
-  [1, '첫판 클리어? 수상한데… 치트 수사 들어갑니다'],
-  [3, '{n}번 만에 클리어, 짭새치곤 봐줄 만하네'],
-  [10, '{n}번째 시도… 순경 시험도 이렇게 봤지?'],
-  [30, '{n}번 도전 끝에 겨우. 세금 낭비의 현장'],
-  [Infinity, '{n}번째… 이 정도면 여기가 네 직장이다'],
+  [1, ['첫판 클리어? 수상한데… 치트 수사 들어간다', '첫판에 깼다고? 녹화 증거 제출해', '첫판 클리어… 운이 실력을 이겼네']],
+  [3, ['{n}번 만에 클리어, 짭새치곤 봐줄 만하네', '{n}번째에 겨우. 뭐 나쁘진 않아', '{n}번 만에? 오 좀 하네… 라고 할 줄 알았지?']],
+  [10, ['{n}번째 시도… 순경 시험도 이렇게 봤냐?', '{n}트 만에 클리어. 끈기 하나는 인정', '{n}번이나? 손가락 몇 개 쓰냐']],
+  [30, ['{n}번 도전 끝에 겨우. 세금 낭비의 현장', '{n}트… 이 시간에 공부를 했으면', '{n}번 떨어지고 깼다. 자랑은 아니야']],
+  [Infinity, ['{n}번째… 이 정도면 여기가 네 직장이다', '{n}트. 정신력은 국가대표, 실력은 동네대표', '{n}번 해서 깼으면 그냥 오기로 깬 거야']],
 ];
 const ROAST_TIME = [
-  [45, '{t} 컷? 과속 단속 대상입니다'],
-  [120, '{t} 걸림. 출동 속도 평균은 하네'],
-  [300, '{t}… 신고하고 짜장면 시켜도 먼저 옴'],
-  [Infinity, '{t} 걸림. 범인은 이미 해외로 튐'],
+  [45, ['{t} 컷? 과속 단속 대상', '{t}? 스피드런 하냐? 재수 없어', '{t}… 빠르긴 한데 정 없다']],
+  [120, ['{t} 걸림. 출동 속도 평균은 하네', '{t}. 그냥저냥, 딱 너 같은 기록', '{t}. 칭찬하기엔 애매해']],
+  [300, ['{t}… 신고하고 짜장면 시켜도 먼저 옴', '{t}. 범인 도망가고도 남는 시간', '{t} 동안 뭐 했냐 진짜']],
+  [Infinity, ['{t} 걸림. 범인은 이미 해외로 튐', '{t}… 이 정도면 출동이 아니라 이사', '{t}. 그 시간에 드라마 한 편 봤다']],
 ];
 function photoRoast(tries, perStage, time) {
-  const a = ROAST_TRIES.find(([n]) => tries <= n)[1].replace('{n}', tries);
-  const b = ROAST_TIME.find(([t]) => perStage < t)[1].replace('{t}', fmtTime(time));
+  const a = roastPick(ROAST_TRIES.find(([n]) => tries <= n)[1]).replace('{n}', tries);
+  const b = roastPick(ROAST_TIME.find(([t]) => perStage < t)[1]).replace('{t}', fmtTime(time));
   return `${a} · ${b}`;
+}
+// 같은 멘트가 연달아 안 나오게: 목록마다 섞어 두고 하나씩 꺼낸다 (다 쓰면 다시 섞음)
+const _roastBags = new Map();
+function roastPick(pool) {
+  let bag = _roastBags.get(pool);
+  if (!bag?.length) {
+    bag = [...pool].sort(() => Math.random() - 0.5);
+    if (bag.length > 1 && bag[0] === pool.last) bag.push(bag.shift());
+    _roastBags.set(pool, bag);
+  }
+  return (pool.last = bag.shift());
 }
 // 엔딩 자막 (클리어 뒤 시각 until 초까지)
 const ENDING = [
@@ -3169,7 +3243,6 @@ const ENDING = [
   { until: 5.4, text: '밑바닥에서 꼭대기까지. 오늘부터 국세횡령왕은 짭새다!' },
   { until: 7.6, text: '…근데 압수한 세금은 언제 돌려줄 거야?' },
 ];
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function loadJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
@@ -3632,6 +3705,7 @@ class Game {
   backToCheckpoint() {
     this.respawn(this.cpIndex);
     this.ui.toast(this.run === 'hard' ? '하드코어라 맨 처음으로 돌아왔어요' : this.mid ? '중간 깃발로 돌아왔어요' : '체크포인트로 돌아왔어요');
+    this.ui.roast(roastPick(BACK_ROASTS));
   }
 
   // 이 단계 번호의 오브젝트가 지금 판에 살아 있나 (전체 코스·하드코어는 지나온 단계까지)
@@ -3657,9 +3731,10 @@ class Game {
     this.mid = null;
     if (this.run === 'full') { this.cpIndex = st; this.ui.toast('체크포인트! 다음 단계로 이어져요', 'gold'); }
     else this.ui.toast('다음 단계! 떨어지면 맨 처음부터예요', 'warn');
+    if (st < 3) this.ui.roast(roastPick(PRAISE_ROASTS));
     this.sound.checkpoint();
     this.feathers.emit(this.p.pos, 20, 0xf4c542, { speed: 5, up: 3, size: 0.22 });
-    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.toast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크', 'warn'), 2600);
+    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.roast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크'), 2600);
   }
 
   // 일시정지 → 스테이지 선택 화면(메인 메뉴). 하던 판은 버린다
@@ -3716,7 +3791,7 @@ class Game {
     this.clock.getDelta();
     this.input.consumeFlaps();
     if (this.settings.tutorial && st === 0) this.beginTutorial();
-    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.toast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크', 'warn'), 2600);
+    if (st === 3) setTimeout(() => this.state === 'playing' && this.ui.roast('국세횡령왕: 여기까지 올라올 수 있을까? 크크크'), 2600);
   }
 
   // ── 튜토리얼 ──
@@ -4001,7 +4076,7 @@ class Game {
       p.lastFlap = this.simTime;
       this._tutorialFlap();
     } else if (!p.grounded) {
-      this.ui.toast('체력이 없어요! 발판에 내려앉아 쉬세요', 'warn');
+      this.ui.toast('체력 바닥! 발판에 내려앉아 쉬어야 해', 'stamina');
     }
 
     this.bird.triggerFlap(empty ? 0.2 : strength);
@@ -4116,17 +4191,13 @@ class Game {
     let pool = FALL_ROASTS[tier - 1];
     if (!p.roastNear && left < 25) { p.roastNear = true; pool = FALL_ROASTS_NEAR; }
     else if (!p.roastFast && tier >= 2 && -p.vel.y > CONFIG.MAX_FALL_SPEED * 0.85) { p.roastFast = true; pool = FALL_ROASTS_FAST; }
-    this.ui.toast(pick(pool).replace('{m}', Math.round(lost)).replace('{n}', Math.max(1, Math.round(left))), 'warn');
+    this.ui.roast(roastPick(pool).replace(/\{m\}/g, Math.round(lost)).replace(/\{n\}/g, Math.max(1, Math.round(left))));
   }
 
   // 크게 떨어져 높이를 lost(m) 잃었으면 놀림 멘트 (같은 멘트가 연달아 나오지 않게)
-  _taunt(lost, suffix = '') {
-    if (lost < TAUNT_DROP) return false;
-    let i;
-    do i = Math.floor(Math.random() * TAUNTS.length); while (i === this._lastTaunt);
-    this._lastTaunt = i;
-    this.ui.toast(TAUNTS[i].replace('{m}', Math.round(lost)) + suffix, 'warn');
-    return true;
+  _taunt(lost) {
+    if (lost < TAUNT_DROP) return;
+    this.ui.roast(roastPick(TAUNTS).replace(/\{m\}/g, Math.round(lost)));
   }
 
   // ── 구(새) vs 회전 박스(OBB) 충돌 ──
@@ -4192,6 +4263,7 @@ class Game {
             p.stun = C.STUN_TIME;
             this.shake = 0.35;
             this.ui.flashHit();
+            if (this.state === 'playing' && Math.random() < 0.6) this.ui.roast(roastPick(HIT_ROASTS));
             this.sound.hit();
             this.feathers.emit(p.pos, 10, 0x7a4e30, { speed: 5, up: 1, size: 0.2 });
           }
@@ -4212,6 +4284,7 @@ class Game {
         this.mid = m;
         p.stamina = CONFIG.STAMINA_MAX;
         this.ui.toast('중간 지점! 떨어지면 여기서 다시 시작해요', 'gold');
+        this.ui.roast(roastPick(PRAISE_ROASTS));
         this.sound.checkpoint();
         this.feathers.emit(p.pos, 20, 0xf4c542, { speed: 5, up: 3, size: 0.22 });
       }
@@ -4242,7 +4315,8 @@ class Game {
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
       const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : this.cpIndex > 0 ? '체크포인트로 돌아가요' : '출발점으로 돌아가요';
-      if (!this._taunt(peak - p.pos.y, ' · ' + back)) this.ui.toast('바닥에 떨어졌어요! ' + back, 'warn');
+      this.ui.toast('바닥에 떨어졌어요! ' + back, 'warn');
+      this._taunt(peak - p.pos.y);
       this.sound.respawn();
       return;
     }
@@ -4253,7 +4327,8 @@ class Game {
       const peak = p.airPeak;
       this.respawn(this.cpIndex);
       const back = this.run === 'hard' ? '하드코어라 맨 처음부터!' : '체크포인트에서 다시 시작해요';
-      if (!this._taunt(peak - p.pos.y, ' · ' + back)) this.ui.toast(back, 'warn');
+      this.ui.toast(back, 'warn');
+      this._taunt(peak - p.pos.y);
       this.sound.respawn();
     }
 
@@ -4353,6 +4428,9 @@ class Game {
       if (n === 8) this.acc = 0;
 
       if (!this.tutorial) this.stats.time += dt;   // 튜토리얼 중에는 시간 안 셈
+      const still = p.grounded && !this.tutorial && Math.hypot(p.vel.x, p.vel.z) < 0.5 && Math.abs(this.ctrl.tilt) < 0.1;
+      this.idleT = still ? (this.idleT || 0) + dt : 0;
+      if (this.idleT > 9) { this.idleT = -12; this.ui.roast(roastPick(IDLE_ROASTS)); }   // 한 번 놀리면 21초 뒤에 또
       this._updateTutorial(dt);
       this.checkProgress();
       if (this.state === 'playing') this.updateCamera(dt);
