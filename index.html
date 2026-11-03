@@ -163,21 +163,20 @@
     background: #16161d; color: #ffd84d; border: 2px solid var(--coral); box-shadow: 0 6px 18px rgba(0,0,0,.35);
     transition: opacity .2s, transform .2s;
   }
-  /* 방해 공작 깃털: 화면 위에서 흩날리며 떨어진다 (클릭은 통과) */
-  #veil { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
-  #veil i {
-    position: absolute; left: var(--x); top: var(--y); width: var(--w); height: calc(var(--w) * 3.2); opacity: 0;
-    border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
-    background: linear-gradient(90deg, #4a2a26 0 47%, #1e1414 47% 53%, #5a3430 53%);
-    animation: veil-fall 2.2s ease-in var(--d) forwards;
+  /* 하드코어 체납 디버프: 압류 도장 모양 배지 */
+  #debuff {
+    position: absolute; right: 26px; top: 92px; transform: rotate(-4deg); pointer-events: none; z-index: 1;
+    display: grid; justify-items: center; padding: 6px 14px; border: 3px double #d0201c; border-radius: 8px;
+    background: rgba(255,255,255,.82); color: #d0201c; font-family: var(--display); text-align: center; max-width: 46vw;
   }
-  @keyframes veil-fall {
-    0% { opacity: 0; transform: translateY(-60px) rotate(var(--r)); }
-    12% { opacity: .95; }
-    70% { opacity: .9; }
-    100% { opacity: 0; transform: translateY(55vh) rotate(calc(var(--r) + 170deg)); }
-  }
-  @media (prefers-reduced-motion: reduce) { #veil i { animation-duration: .8s; } }
+  #debuff b { font-size: 1.15rem; font-weight: 400; }
+  #debuff span { font-size: .72rem; line-height: 1.3; }
+  #debuff.bump { animation: debuff-bump .5s; }
+  @keyframes debuff-bump { 0% { transform: rotate(-4deg) scale(1.6); } 100% { transform: rotate(-4deg) scale(1); } }
+  /* 터치: '체크포인트로' 버튼 바로 아래 */
+  body.touch #debuff { top: calc(42% + 54px); right: max(16px, env(safe-area-inset-right, 0px)); max-width: 34vw; padding: 4px 8px; }
+  @media (max-height: 500px) { body.touch #debuff { top: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); right: auto; left: calc(50% - 75px); width: 150px; max-width: none; } }   /* 폰 가로: 아래 가운데(조작 패드와 날갯짓 버튼 사이) */
+  body.touch #debuff span { font-size: .62rem; }
   /* 도발 편지 */
   #letter { z-index: 5; cursor: pointer; }
   .letter {
@@ -624,7 +623,7 @@
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
-  <div id="veil" aria-hidden="true"></div>
+  <div id="debuff" hidden><b id="debuff-name"></b><span id="debuff-info"></span></div>
   <div id="roast" role="status" aria-live="polite"><span class="who">👑 국세횡령왕</span><span id="roast-text"></span></div>
   <div id="banner" aria-hidden="true"><span id="banner-num"></span><span id="banner-name"></span></div>
   <div id="hit-flash"></div>
@@ -2039,7 +2038,7 @@ class Bird {
   setLook(look) {
     this.look = look;
     if (!this.acc) return;   // 모델을 다 불러오면 다시 불린다
-    const tint = { gold: [1.7, 1.3, 0.35], dark: [0.35, 0.3, 0.45] }[look.skin] ?? [1, 1, 1];
+    const tint = { gold: [1.7, 1.3, 0.35], dark: [0.35, 0.3, 0.45], rival: [0.55, 0.42, 0.42] }[look.skin] ?? [1, 1, 1];
     for (const m of this.meshes) {
       m.material.color.copy(m.userData.baseColor).multiply(new THREE.Color(...tint));
       m.material.emissive?.setHex(look.skin === 'gold' ? 0x3a2a00 : 0x000000);
@@ -2187,7 +2186,13 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 // ─────────────────────────────────────────────────────────────
 class Feathers {
   constructor(scene, max = 180) {
-    const geo = new THREE.OctahedronGeometry(1, 0);
+    // 깃털 모양: 길쭉한 잎 모양 판 (깃대 쪽이 살짝 휜다)
+    const sh = new THREE.Shape();
+    sh.moveTo(0, -1.1);
+    sh.quadraticCurveTo(0.75, -0.1, 0.12, 1);
+    sh.lineTo(-0.04, 1.05);
+    sh.quadraticCurveTo(-0.65, -0.05, 0, -1.1);
+    const geo = new THREE.ShapeGeometry(sh, 6);
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.8, side: THREE.DoubleSide });
     this.mesh = new THREE.InstancedMesh(geo, mat, max);
     this.mesh.frustumCulled = false;
@@ -2249,7 +2254,7 @@ class Feathers {
       p.rot.x += p.spin.x * dt; p.rot.y += p.spin.y * dt; p.rot.z += p.spin.z * dt;
       const fade = 1 - Math.pow(p.life / p.max, 3);
       this._q.setFromEuler(p.rot);
-      this._s.set(p.size * 0.45 * fade, p.size * 1.6 * fade, p.size * 0.08 + 0.01);
+      this._s.set(p.size * 0.9 * fade, p.size * 0.8 * fade, 1);   // 깃털 모양 판(길이 약 2) 그대로
       this.mesh.setMatrixAt(i, this._m.compose(p.pos, this._q, this._s));
     }
     if (any) this.mesh.instanceMatrix.needsUpdate = true;
@@ -2364,7 +2369,6 @@ class UI {
       state: $('flight-state'),
       toast: $('toast'),
       roast: $('roast'),
-      veil: $('veil'),
       banner: $('banner'),
       bannerNum: $('banner-num'),
       bannerName: $('banner-name'),
@@ -2610,23 +2614,17 @@ class UI {
     for (const b of document.querySelectorAll('.stage-pick .chip')) b.setAttribute('aria-pressed', String(b.dataset.stage === String(current)));
   }
 
-  // 방해 공작 깃털: 화면 가운데 위쪽에 몰아서 뿌린다
-  featherVeil() {
-    const v = this.el.veil;
-    v.innerHTML = '';
-    for (let i = 0; i < 18; i++) {
-      const f = document.createElement('i');
-      const st = f.style;
-      st.setProperty('--x', `${15 + Math.random() * 70}%`);
-      st.setProperty('--y', `${-10 + Math.random() * 45}%`);
-      st.setProperty('--w', `${22 + Math.random() * 30}px`);
-      st.setProperty('--r', `${Math.random() * 360}deg`);
-      st.setProperty('--d', `${Math.random() * 0.35}s`);
-      v.appendChild(f);
-    }
-    clearTimeout(this._veilTimer);
-    this._veilTimer = setTimeout(() => { v.innerHTML = ''; }, 2800);
+  // 체납 디버프 배지 (level 0 이면 숨김)
+  setDebuff(level, short) {
+    const el = $('debuff');
+    this._set('debuff', `${level}|${short}`, () => {
+      el.hidden = !level;
+      if (!level) return;
+      $('debuff-name').textContent = `🧾 ${DEBUFFS[level].name} Lv${level}`;
+      $('debuff-info').textContent = `봉투 ${short}개 부족`;
+    });
   }
+  bumpDebuff() { const el = $('debuff'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 
   showLetter(body, ps, sign, ok) {
     $('letter-body').textContent = body;
@@ -3475,6 +3473,20 @@ const LETTER_PS = ['', '', 'P.S. 오늘도 떨어져 줘', 'P.S. 내 왕관 반�
 const LETTER_OK = ['닥쳐', '두고 봐', '알았어…', '읽었음 (화남)', '이번엔 다르다'];
 const today = () => new Date().toLocaleDateString('sv');   // 2026-11-03
 
+// 하드코어 체납 디버프: 올라간 높이에 비해 봉투가 모자라면 단계별로 불리해진다
+const DEBUFFS = [
+  null,
+  { name: '세금 체납', regen: 0.6, cost: 1.2, flap: 1, grav: 1, desc: '체력 회복 느려짐 · 날갯짓 체력 더 듦' },
+  { name: '압류 딱지', regen: 0.5, cost: 1.3, flap: 0.88, grav: 1, desc: '+ 날갯짓 힘 약해짐' },
+  { name: '체포 영장', regen: 0.4, cost: 1.4, flap: 0.82, grav: 1.12, desc: '+ 몸이 무거워짐(중력↑)' },
+];
+const DEBUFFS_NONE = { regen: 1, cost: 1, flap: 1, grav: 1 };
+const DEBUFF_ROASTS = [
+  ['봉투도 안 줍고 올라가? 체납이다 ㅋ', '세금 안 내고 튀냐? 체납 딱지 붙였다'],
+  ['압류 딱지 추가. 날개 힘도 압류다 ㅋㅋ', '봉투 더 빼먹으면 날개째 압류한다'],
+  ['체포 영장 발부! 무거운 죄책감 맛 좀 봐라', '체납 3단계. 이제 중력이 너를 체포한다'],
+];
+
 // 누적 추락 횟수 → 계급 (많이 떨어질수록 '승진')
 const RANKS = [[0, '순경'], [10, '경장'], [30, '경사'], [60, '경위'], [100, '경감'], [200, '경정'], [400, '총경'], [700, '경무관'], [1000, '파면 위기'], [2000, '중력의 노예']];
 const rankOf = (falls) => RANKS.filter(([n]) => falls >= n).pop();
@@ -4098,7 +4110,7 @@ class Game {
   goMenu() {
     this.endTutorial(null);
     this.runEnv = 0;
-    if (this.flyer) this.flyer.visible = false;
+    if (this.flyer) this.flyer.root.visible = false;
     setTimeout(() => this.state === 'menu' && this._letter(), 400);
     this.state = 'menu';
     this.ui.show('menu');
@@ -4116,8 +4128,11 @@ class Game {
     this.ending = null;
     this.slowRoasted = false;
     this.runEnv = 0;                 // 이번 판에 지갑에 넣은 봉투
+    this.debuffLv = 0;
+    this.debuff = DEBUFFS_NONE;
+    this.ui.setDebuff(0, 0);
     this.sab = { t: -1, wait: 22 + Math.random() * 18 };   // 첫 방해 공작은 22~40초 뒤
-    if (this.flyer) this.flyer.visible = false;
+    if (this.flyer) this.flyer.root.visible = false;
     this.sameSpot = 0; this.lastFallAt = null;
     this.level.resetEnvelopes();
     this.ui.setCoins(0, this.run ? 12 : 3);
@@ -4401,49 +4416,94 @@ class Game {
     this.rival = { g, crown, home: g.position.clone() };
     this._resetRival();
     this.level.showStage(this.stage);
-    // 방해 공작용 국세횡령왕 (뼈가 있는 모델이라 복제 대신 한 번 더 불러온다)
-    const fm = (await new GLTFLoader().loadAsync('eagle.glb')).scene;
-    fm.traverse((m) => { if (m.isMesh) { m.frustumCulled = false; m.material = m.material.clone(); m.material.color.setRGB(0.55, 0.42, 0.42); } });
-    const flyer = new THREE.Group();
-    flyer.add(fm);
-    const fc = makeCrown();
-    fc.position.copy(_crownOff);
-    flyer.add(fc);
-    flyer.visible = false;
-    this.scene.add(flyer);
-    this.flyer = flyer;
+    // 방해 공작용 국세횡령왕: 플레이어와 같은 새(날갯짓·몸 기울이기 애니메이션), 붉은 톤 + 왕관
+    const fb = new Bird();
+    fb.setLook({ skin: 'rival', items: ['crown'] });
+    fb.root.visible = false;
+    this.scene.add(fb.root);
+    this.flyer = fb;
   }
 
   // ── 방해 공작: 전체 코스·하드코어에서 가끔 국세횡령왕이 카메라 앞을 가로지르며 깃털을 뿌린다 (조작·물리엔 영향 없음) ──
+  // 경로: 카메라 뒤쪽 위에서 날개를 접고 급강하 → 카메라와 짭새 사이를 스치듯 지나며 날개를 쳐 깃털을 날림 → 몸을 기울여 선회하며 날갯짓으로 올라가 사라진다
   _sabotage(dt) {
     const s = this.sab, f = this.flyer;
     if (!f) return;
     if (s.t < 0) {
       s.wait -= dt;
-      if (s.wait <= 0) { s.t = 0; s.dir = Math.random() < 0.5 ? 1 : -1; f.visible = true; }
+      if (s.wait <= 0) this._startSabotage();
       return;
     }
-    const prev = s.t / 1.8;
+    const D = 2.8, prev = s.t / D;
     s.t += dt;
-    const k = s.t / 1.8, c = this.camera;
-    _fwd.set(0, 0, -1).applyQuaternion(c.quaternion);
-    _a.set(1, 0, 0).applyQuaternion(c.quaternion).multiplyScalar(s.dir);   // 날아가는 방향(화면 가로)
-    f.position.copy(c.position).addScaledVector(_fwd, 4.5).addScaledVector(_a, -8 + 16 * k);
-    f.position.y += 0.6 + Math.sin(k * Math.PI) * 0.8 - k * 0.6;
-    _b.copy(f.position).sub(_a);   // 모델 앞(-Z)이 날아가는 쪽을 보게
-    f.lookAt(_b);
-    f.rotateZ(Math.sin(this.levelTime * 18) * 0.25);   // 퍼덕퍼덕
-    if (prev < 0.42 && k >= 0.42) {
-      this.ui.featherVeil();
-      this.feathers.emit(f.position, 30, 0x5a3430, { speed: 6, up: 1, size: 0.3, life: 1.6 });
+    const k = Math.min(1, s.t / D);
+    const u = k < 0.45 ? 0.45 * (k / 0.45) ** 1.6 : k;   // 급강하는 점점 빨라진다
+    s.curve.getPointAt(u, f.root.position);
+    s.curve.getTangentAt(u, _a);
+    const yaw = Math.atan2(-_a.x, -_a.z);
+    const turn = s.yaw === undefined ? 0 : Math.atan2(Math.sin(yaw - s.yaw), Math.cos(yaw - s.yaw)) / Math.max(dt, 1e-3);
+    s.yaw = yaw;
+    s.roll += (clamp(-turn * 0.35, -0.9, 0.9) - s.roll) * damp(6, dt);
+    f.root.rotation.y = yaw;
+    const diving = u < 0.42;
+    if (!diving && Math.floor(prev * D / 0.32) !== Math.floor(k * D / 0.32)) f.triggerFlap(1);   // 올라갈 때 힘찬 날갯짓
+    f.update(dt, { roll: s.roll, pitch: clamp(_a.y * 0.9, -0.6, 0.5), grounded: false, gliding: diving, spread: diving, stunned: false, wingPose: null, turn: 0 });
+    // 날개 끝에서 깃털이 조금씩 빠진다
+    if (Math.floor(prev * 12) !== Math.floor(k * 12)) this.feathers.emit(f.root.position, 2, 0x5a3430, { speed: 2, up: 0.5, size: 0.14, life: 2.4 });
+    // 카메라 앞을 스칠 때: 날개를 크게 쳐서 깃털 뭉치를 카메라 쪽으로 날리고, 바람 소리·흔들림
+    if (prev < 0.5 && k >= 0.5) {
+      f.triggerFlap(1);
+      this.sound.flap(1);
+      this.feathers.emit(f.root.position, 40, 0x5a3430, { speed: 6, up: 1.5, size: 0.3, life: 2.4 });
+      _fwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      this.feathers.emit(_b.copy(this.camera.position).addScaledVector(_fwd, 1.6), 22, 0x6a4038, { speed: 1.5, up: 0.6, size: 0.09, life: 2.2 });
       this.ui.roast(roastPick(SABOTAGE_ROASTS));
-      this.shake = Math.max(this.shake, 0.18);
+      this.shake = Math.max(this.shake, 0.22);
     }
     if (k >= 1) {
-      f.visible = false;
+      f.root.visible = false;
       s.t = -1;
       s.wait = this.run === 'hard' ? 28 + Math.random() * 22 : 40 + Math.random() * 30;
     }
+  }
+
+  // 하드코어: 높이 비율 × 12개 - 1(여유) 만큼은 모았어야 한다. 모자란 개수만큼 디버프(최대 3단계)
+  _updateDebuff() {
+    let lv = 0, short = 0;
+    if (this.run === 'hard') {
+      const need = Math.floor(clamp(this.p.pos.y / NEST_HEIGHT, 0, 1) * 12) - 1;
+      short = Math.max(0, need - this.stats.coins);
+      lv = Math.min(3, short);
+    }
+    if (lv > (this.debuffLv ?? 0)) {
+      const d = DEBUFFS[lv];
+      this.ui.toast(`체납 디버프 Lv${lv} '${d.name}': ${d.desc}`, 'warn');
+      this.ui.roast(roastPick(DEBUFF_ROASTS[lv - 1]));
+      this.ui.bumpDebuff();
+    } else if (lv < (this.debuffLv ?? 0)) {
+      this.ui.toast(lv ? `체납 일부 납부! 디버프 Lv${lv}로 내려감` : '체납 완납! 디버프 풀림', 'gold');
+    }
+    this.debuffLv = lv;
+    this.debuff = DEBUFFS[lv] ?? DEBUFFS_NONE;
+    this.ui.setDebuff(lv, short);
+  }
+
+  _startSabotage() {
+    const s = this.sab, c = this.camera, P = this.p.pos;
+    const side = Math.random() < 0.5 ? 1 : -1;
+    _fwd.set(0, 0, -1).applyQuaternion(c.quaternion); _fwd.y = 0; _fwd.normalize();
+    _right.set(-_fwd.z, 0, _fwd.x).multiplyScalar(side);
+    const at = (base, f, r, up) => base.clone().addScaledVector(_fwd, f).addScaledVector(_right, r).add(new THREE.Vector3(0, up, 0));
+    // 카메라는 짭새 뒤에 있으니, 짭새보다 2m 앞(카메라 쪽 아님)이 아니라 카메라와 짭새 사이를 지나게 한다
+    s.curve = new THREE.CatmullRomCurve3([
+      at(c.position, -6, -9, 9),     // 카메라 뒤 옆 위
+      at(P, -6, -5, 5),
+      at(P, -2.4, -0.5, 1.4),        // 카메라와 짭새 사이를 스친다
+      at(P, 5, 5, 3.5),
+      at(P, 16, 12, 11),             // 앞쪽 위로 선회하며 사라짐
+    ], false, 'centripetal');
+    s.t = 0; s.yaw = undefined; s.roll = 0;
+    this.flyer.root.visible = true;
   }
 
   // ── 도발 편지: 누적·오늘·어제 기록으로 국세횡령왕이 한마디 ──
@@ -4499,14 +4559,14 @@ class Game {
     let scale = THREE.MathUtils.lerp(C.FLAP_MIN_SCALE, C.FLAP_MAX_SCALE, clamp(strength, 0, 1));
     // 체력이 바닥이면 허우적거릴 뿐 힘이 거의(기본값은 전혀) 안 나온다.
     // 예전에는 '떨어지는 속도 줄이기'가 따로 적용돼서 연타하면 체력 없이도 계속 올라갈 수 있었다.
-    const empty = C.STAMINA_ENABLED && p.stamina < C.STAMINA_FLAP_COST;
+    const empty = C.STAMINA_ENABLED && p.stamina < C.STAMINA_FLAP_COST * (this.debuff?.cost ?? 1);
     if (C.STAMINA_ENABLED) {
-      if (!empty) p.stamina -= C.STAMINA_FLAP_COST;
+      if (!empty) p.stamina -= C.STAMINA_FLAP_COST * (this.debuff?.cost ?? 1);
       else { scale *= C.STAMINA_EMPTY_SCALE; p.stamina = 0; }
     }
     if (scale > 0) {
       if (p.vel.y < 0 && !empty) p.vel.y *= C.FLAP_FALL_DAMP; // 떨어지던 중이면 하강을 먼저 꺾어준다
-      p.vel.y += C.FLAP_UP * scale;
+      p.vel.y += C.FLAP_UP * scale * (this.debuff?.flap ?? 1);
       _fwd.set(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
       p.vel.addScaledVector(_fwd, C.FLAP_FORWARD * scale);
       if (p.grounded) { p.grounded = false; p.ground = null; p.pos.y += 0.05; } // 이륙
@@ -4545,7 +4605,7 @@ class Game {
     _right.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
 
     // 2) 중력
-    p.vel.y -= C.GRAVITY * dt;
+    p.vel.y -= C.GRAVITY * (this.debuff?.grav ?? 1) * dt;
 
     // 3) 바람 구역
     p.inWind = false;
@@ -4598,7 +4658,7 @@ class Game {
     }
 
     // 11) 체력 회복
-    p.stamina = Math.min(C.STAMINA_MAX, p.stamina + (p.grounded ? C.STAMINA_REGEN_GROUND : C.STAMINA_REGEN_AIR) * dt);
+    p.stamina = Math.min(C.STAMINA_MAX, p.stamina + (p.grounded ? C.STAMINA_REGEN_GROUND : C.STAMINA_REGEN_AIR) * (this.debuff?.regen ?? 1) * dt);
 
     // 12) 추락 판정: 마지막으로 서 있던/가장 높았던 지점에서 크게 떨어지면 1회
     if (p.grounded) {
@@ -4878,6 +4938,7 @@ class Game {
       this._updateTutorial(dt);
       this.checkProgress();
       if (this.run && !this.tutorial && this.state === 'playing') this._sabotage(dt);
+      this._updateDebuff();
       if (this.state === 'playing') this.updateCamera(dt);
       if (this.state === 'playing' && this.mode === 'camera' && !this.pose.present) this.goAway();
     } else if (this.state === 'away') {
