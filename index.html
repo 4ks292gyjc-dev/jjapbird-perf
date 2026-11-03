@@ -4425,7 +4425,7 @@ class Game {
   }
 
   // ── 방해 공작: 전체 코스·하드코어에서 가끔 국세횡령왕이 카메라 앞을 가로지르며 깃털을 뿌린다 (조작·물리엔 영향 없음) ──
-  // 경로: 카메라 뒤쪽 위에서 날개를 접고 급강하 → 카메라와 짭새 사이를 스치듯 지나며 날개를 쳐 깃털을 날림 → 몸을 기울여 선회하며 날갯짓으로 올라가 사라진다
+  // 경로: 카메라 뒤쪽 위에서 날개 접고 급강하 → 카메라 바로 앞에서 정면으로 1.4초 퍼덕이며 시야를 가리고 깃털을 뿌림 → 선회하며 올라가 사라진다
   _sabotage(dt) {
     const s = this.sab, f = this.flyer;
     if (!f) return;
@@ -4434,37 +4434,56 @@ class Game {
       if (s.wait <= 0) this._startSabotage();
       return;
     }
-    const D = 2.8, prev = s.t / D;
+    const prevT = s.t;
     s.t += dt;
-    const k = Math.min(1, s.t / D);
-    const u = k < 0.45 ? 0.45 * (k / 0.45) ** 1.6 : k;   // 급강하는 점점 빨라진다
-    s.curve.getPointAt(u, f.root.position);
-    s.curve.getTangentAt(u, _a);
-    const yaw = Math.atan2(-_a.x, -_a.z);
-    const turn = s.yaw === undefined ? 0 : Math.atan2(Math.sin(yaw - s.yaw), Math.cos(yaw - s.yaw)) / Math.max(dt, 1e-3);
-    s.yaw = yaw;
-    s.roll += (clamp(-turn * 0.35, -0.9, 0.9) - s.roll) * damp(6, dt);
-    f.root.rotation.y = yaw;
-    const diving = u < 0.42;
-    if (!diving && Math.floor(prev * D / 0.32) !== Math.floor(k * D / 0.32)) f.triggerFlap(1);   // 올라갈 때 힘찬 날갯짓
-    f.update(dt, { roll: s.roll, pitch: clamp(_a.y * 0.9, -0.6, 0.5), grounded: false, gliding: diving, spread: diving, stunned: false, wingPose: null, turn: 0 });
-    // 날개 끝에서 깃털이 조금씩 빠진다
-    if (Math.floor(prev * 12) !== Math.floor(k * 12)) this.feathers.emit(f.root.position, 2, 0x5a3430, { speed: 2, up: 0.5, size: 0.14, life: 2.4 });
-    // 카메라 앞을 스칠 때: 날개를 크게 쳐서 깃털 뭉치를 카메라 쪽으로 날리고, 바람 소리·흔들림
-    if (prev < 0.5 && k >= 0.5) {
-      f.triggerFlap(1);
-      this.sound.flap(1);
-      this.feathers.emit(f.root.position, 40, 0x5a3430, { speed: 6, up: 1.5, size: 0.3, life: 2.4 });
-      _fwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
-      this.feathers.emit(_b.copy(this.camera.position).addScaledVector(_fwd, 1.6), 22, 0x6a4038, { speed: 1.5, up: 0.6, size: 0.09, life: 2.2 });
-      this.ui.roast(roastPick(SABOTAGE_ROASTS));
-      this.shake = Math.max(this.shake, 0.22);
+    const c = this.camera;
+    _fwd.set(0, 0, -1).applyQuaternion(c.quaternion);
+    let pitch = 0, glide = false;
+    if (s.phase === 'hover') {
+      // 카메라 앞 2.6m 에 붙어서 좌우로 흔들리며 퍼덕인다 (카메라를 따라온다)
+      _right.set(1, 0, 0).applyQuaternion(c.quaternion);
+      f.root.position.copy(c.position).addScaledVector(_fwd, 2.6).addScaledVector(_right, Math.sin(s.t * 3.2) * 0.45);
+      f.root.position.y += 0.15 + Math.sin(s.t * 7) * 0.15;
+      _a.subVectors(c.position, f.root.position);   // 카메라를 정면으로 본다
+      s.yaw = Math.atan2(-_a.x, -_a.z);
+      s.roll += (Math.sin(s.t * 3.2) * 0.25 - s.roll) * damp(6, dt);
+      if (Math.floor(prevT / 0.18) !== Math.floor(s.t / 0.18)) f.triggerFlap(1);
+      if (Math.floor(prevT / 0.12) !== Math.floor(s.t / 0.12)) {   // 렌즈 앞에 큰 깃털이 계속 흩날린다
+        _b.copy(c.position).addScaledVector(_fwd, 1.2 + Math.random() * 0.8).addScaledVector(_right, (Math.random() - 0.5) * 1.6);
+        _b.y += (Math.random() - 0.3) * 0.9;
+        this.feathers.emit(_b, 3, 0x5a3430, { speed: 0.8, up: 0.2, size: 0.13, life: 2.6 });
+      }
+      if (s.t >= 1.4) this._sabotageExit();
+    } else {
+      const D = s.phase === 'in' ? 1.1 : 1.5, k = Math.min(1, s.t / D);
+      const u = s.phase === 'in' ? k ** 1.4 : k;   // 급강하는 점점 빨라진다
+      s.curve.getPointAt(u, f.root.position);
+      s.curve.getTangentAt(u, _a);
+      const yaw = Math.atan2(-_a.x, -_a.z);
+      const turn = s.yaw === undefined ? 0 : Math.atan2(Math.sin(yaw - s.yaw), Math.cos(yaw - s.yaw)) / Math.max(dt, 1e-3);
+      s.yaw = yaw;
+      s.roll += (clamp(-turn * 0.35, -0.9, 0.9) - s.roll) * damp(6, dt);
+      pitch = clamp(_a.y * 0.9, -0.6, 0.5);
+      glide = s.phase === 'in';
+      if (s.phase === 'out' && Math.floor(prevT / 0.3) !== Math.floor(s.t / 0.3)) f.triggerFlap(1);
+      if (Math.floor(prevT / 0.1) !== Math.floor(s.t / 0.1)) this.feathers.emit(f.root.position, 2, 0x5a3430, { speed: 2, up: 0.5, size: 0.14, life: 2.4 });
+      if (k >= 1) {
+        if (s.phase === 'in') {   // 카메라 앞에 도착: 날개를 크게 치며 깃털 뭉치·웃음·흔들림
+          s.phase = 'hover'; s.t = 0;
+          f.triggerFlap(1);
+          this.sound.flap(1);
+          this.feathers.emit(_b.copy(c.position).addScaledVector(_fwd, 1.8), 40, 0x5a3430, { speed: 3, up: 0.8, size: 0.2, life: 2.8 });
+          this.ui.roast(roastPick(SABOTAGE_ROASTS));
+          this.shake = Math.max(this.shake, 0.3);
+        } else {
+          f.root.visible = false;
+          s.t = -1;
+          s.wait = this.run === 'hard' ? 28 + Math.random() * 22 : 40 + Math.random() * 30;
+        }
+      }
     }
-    if (k >= 1) {
-      f.root.visible = false;
-      s.t = -1;
-      s.wait = this.run === 'hard' ? 28 + Math.random() * 22 : 40 + Math.random() * 30;
-    }
+    f.root.rotation.y = s.yaw;
+    f.update(dt, { roll: s.roll, pitch, grounded: false, gliding: glide, spread: glide, stunned: false, wingPose: null, turn: 0 });
   }
 
   // 하드코어: 높이 비율 × 12개 - 2(여유) 만큼은 모았어야 한다. 모자란 개수만큼 디버프(최대 3단계)
@@ -4489,21 +4508,24 @@ class Game {
   }
 
   _startSabotage() {
-    const s = this.sab, c = this.camera, P = this.p.pos;
+    const s = this.sab, c = this.camera;
     const side = Math.random() < 0.5 ? 1 : -1;
     _fwd.set(0, 0, -1).applyQuaternion(c.quaternion); _fwd.y = 0; _fwd.normalize();
     _right.set(-_fwd.z, 0, _fwd.x).multiplyScalar(side);
-    const at = (base, f, r, up) => base.clone().addScaledVector(_fwd, f).addScaledVector(_right, r).add(new THREE.Vector3(0, up, 0));
-    // 카메라는 짭새 뒤에 있으니, 짭새보다 2m 앞(카메라 쪽 아님)이 아니라 카메라와 짭새 사이를 지나게 한다
-    s.curve = new THREE.CatmullRomCurve3([
-      at(c.position, -6, -9, 9),     // 카메라 뒤 옆 위
-      at(P, -6, -5, 5),
-      at(P, -2.4, -0.5, 1.4),        // 카메라와 짭새 사이를 스친다
-      at(P, 5, 5, 3.5),
-      at(P, 16, 12, 11),             // 앞쪽 위로 선회하며 사라짐
-    ], false, 'centripetal');
-    s.t = 0; s.yaw = undefined; s.roll = 0;
+    const at = (f, r, up) => c.position.clone().addScaledVector(_fwd, f).addScaledVector(_right, r).add(new THREE.Vector3(0, up, 0));
+    // 카메라 뒤 옆 위 → 앞쪽 옆 → 카메라 바로 앞(정지 비행 자리)
+    s.curve = new THREE.CatmullRomCurve3([at(-6, -9, 9), at(3, -6, 5), at(2.6, 0, 0.2)], false, 'centripetal');
+    s.phase = 'in'; s.side = side; s.t = 0; s.yaw = undefined; s.roll = 0;
     this.flyer.root.visible = true;
+  }
+
+  _sabotageExit() {
+    const s = this.sab, P = this.p.pos, f = this.flyer.root;
+    _fwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion); _fwd.y = 0; _fwd.normalize();
+    _right.set(-_fwd.z, 0, _fwd.x).multiplyScalar(s.side);
+    const at = (fw, r, up) => P.clone().addScaledVector(_fwd, fw).addScaledVector(_right, r).add(new THREE.Vector3(0, up, 0));
+    s.curve = new THREE.CatmullRomCurve3([f.position.clone(), at(4, 5, 3), at(16, 12, 11)], false, 'centripetal');
+    s.phase = 'out'; s.t = 0; s.yaw = undefined;
   }
 
   // ── 도발 편지: 누적·오늘·어제 기록으로 국세횡령왕이 한마디 ──
