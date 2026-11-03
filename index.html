@@ -3476,9 +3476,9 @@ const today = () => new Date().toLocaleDateString('sv');   // 2026-11-03
 // 하드코어 체납 디버프: 올라간 높이에 비해 봉투가 모자라면 단계별로 불리해진다
 const DEBUFFS = [
   null,
-  { name: '세금 체납', regen: 0.6, cost: 1.2, flap: 1, grav: 1, desc: '체력 회복 느려짐 · 날갯짓 체력 더 듦' },
-  { name: '압류 딱지', regen: 0.5, cost: 1.3, flap: 0.88, grav: 1, desc: '+ 날갯짓 힘 약해짐' },
-  { name: '체포 영장', regen: 0.4, cost: 1.4, flap: 0.82, grav: 1.12, desc: '+ 몸이 무거워짐(중력↑)' },
+  { name: '세금 체납', regen: 0.8, cost: 1.1, flap: 1, grav: 1, desc: '체력 회복 조금 느려짐 · 날갯짓 체력 조금 더 듦' },
+  { name: '압류 딱지', regen: 0.7, cost: 1.15, flap: 0.94, grav: 1, desc: '+ 날갯짓 힘 조금 약해짐' },
+  { name: '체포 영장', regen: 0.6, cost: 1.2, flap: 0.9, grav: 1.06, desc: '+ 몸이 조금 무거워짐(중력↑)' },
 ];
 const DEBUFFS_NONE = { regen: 1, cost: 1, flap: 1, grav: 1 };
 const DEBUFF_ROASTS = [
@@ -4467,11 +4467,11 @@ class Game {
     }
   }
 
-  // 하드코어: 높이 비율 × 12개 - 1(여유) 만큼은 모았어야 한다. 모자란 개수만큼 디버프(최대 3단계)
+  // 하드코어: 높이 비율 × 12개 - 2(여유) 만큼은 모았어야 한다. 모자란 개수만큼 디버프(최대 3단계)
   _updateDebuff() {
     let lv = 0, short = 0;
     if (this.run === 'hard') {
-      const need = Math.floor(clamp(this.p.pos.y / NEST_HEIGHT, 0, 1) * 12) - 1;
+      const need = Math.floor(clamp(this.p.pos.y / NEST_HEIGHT, 0, 1) * 12) - 2;
       short = Math.max(0, need - this.stats.coins);
       lv = Math.min(3, short);
     }
